@@ -2,6 +2,8 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { DEFAULT_ENGINE_URL } from "../cli/src/config.ts";
+import { installButtonsMarkdown, installLinks } from "../cli/src/deeplinks.ts";
 
 interface Output {
   readonly content: string;
@@ -62,6 +64,20 @@ async function skillOutputs(): Promise<Record<string, Output>> {
   return outputs;
 }
 
+const BUTTONS_START = "<!-- install-buttons:start -->";
+const BUTTONS_END = "<!-- install-buttons:end -->";
+
+async function readmeWithButtons(): Promise<string> {
+  const readme = await read("README.md");
+  const start = readme.indexOf(BUTTONS_START);
+  const end = readme.indexOf(BUTTONS_END);
+  if (start === -1 || end < start) {
+    throw new Error(`README.md needs ${BUTTONS_START} and ${BUTTONS_END} markers`);
+  }
+  const buttons = installButtonsMarkdown(installLinks(DEFAULT_ENGINE_URL));
+  return `${readme.slice(0, start + BUTTONS_START.length)}\n${buttons}\n${readme.slice(end)}`;
+}
+
 async function collectOutputs(): Promise<Record<string, Output>> {
   const rules = await read("rules/memory.md");
   const license = await read("LICENSE");
@@ -95,6 +111,7 @@ async function collectOutputs(): Promise<Record<string, Output>> {
     "claude-code/LICENSE": committed(license),
     "cli/LICENSE": committed(license),
     "cli/dist/lg.mjs": { content: cli, committed: false },
+    "README.md": committed(await readmeWithButtons()),
     ...(await skillOutputs()),
   };
 }

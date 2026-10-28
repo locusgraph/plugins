@@ -58,6 +58,18 @@ call.
 
 ## Install
 
+One click for the MCP server in Cursor or VS Code:
+
+<!-- install-buttons:start -->
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=locusgraph&config=eyJ1cmwiOiJodHRwczovL2FwaS5sb2N1c2dyYXBoLmNvbS9tY3A%2FdG9vbHM9ZnJlZSJ9)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_LocusGraph-0098FF?logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=locusgraph&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi.locusgraph.com%2Fmcp%3Ftools%3Dfree%22%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_LocusGraph-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=locusgraph&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi.locusgraph.com%2Fmcp%3Ftools%3Dfree%22%7D)
+<!-- install-buttons:end -->
+
+The buttons add the server only. The rules that tell the agent when to recall and store come
+from `lg init cursor` or `lg init vscode`. `lg links --engine dev` prints the same links for
+the dev engine.
+
 One command, for every agent it finds in the project and home directory:
 
 ```
@@ -137,10 +149,12 @@ directly.
 ```
 cli/src/
   bin.ts              process entry: runs main, writes stdout and stderr, sets the exit code
-  main.ts             command table: recall, guard, init
+  main.ts             command table: recall, guard, init, links
   commands/           one file per command, each returning a CommandResult and doing no I/O to the terminal
   platforms/          one file per agent: detect() and install(); index.ts lists them
-  config.ts           engine URL, MCP URL, paid tool names
+  config.ts           engines, MCP URL, paid tool names
+  deeplinks.ts        Cursor and VS Code install links, and the README buttons
+  engine-flag.ts      --engine, shared by init and links
   env.ts              LOCUSGRAPH_* variables, read once
   engine.ts           the one REST call: POST /v1/memories
   files.ts            JSON merge, rules block, TOML table
@@ -152,7 +166,8 @@ cli/test/             vitest; bundle.test.ts runs the committed hook bundles
 ```
 
 `rules/memory.md` is the one source for every rules file, and `skills/` for every skill.
-`npm run build` regenerates the rules files, copies the skills and licence, and bundles the CLI
+`npm run build` regenerates the rules files and the README install buttons, copies the skills
+and licence, and bundles the CLI
 into `claude-code/hooks/lg.mjs`, `cursor/.cursor/hooks/lg.mjs` and `cli/dist/lg.mjs`.
 
 ```

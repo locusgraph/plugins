@@ -265,8 +265,7 @@ function findPlatform(id) {
   return PLATFORMS.find((platform) => platform.id === id);
 }
 
-// cli/src/commands/init-args.ts
-var CONFIRM_FLAG = "--yes";
+// cli/src/engine-flag.ts
 var ENGINE_FLAG = "--engine";
 var ENGINE_CHOICES = `${Object.keys(ENGINES).join(", ")}, or an https:// URL`;
 function engineFrom(value) {
@@ -275,26 +274,35 @@ function engineFrom(value) {
   }
   return resolveEngine(value) ?? new Error(`unknown engine: ${value}. Choose ${ENGINE_CHOICES}`);
 }
-function parseInitArgs(args) {
-  let confirmed = false;
+function takeEngineFlag(args) {
   let engineUrl = DEFAULT_ENGINE_URL;
-  const platformIds = [];
+  const rest = [];
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
-    if (arg === CONFIRM_FLAG) {
-      confirmed = true;
-    } else if (arg === ENGINE_FLAG || arg.startsWith(`${ENGINE_FLAG}=`)) {
-      index += arg === ENGINE_FLAG ? 1 : 0;
-      const engine = engineFrom(
-        arg === ENGINE_FLAG ? args[index] : arg.slice(ENGINE_FLAG.length + 1)
-      );
-      if (engine instanceof Error) return engine;
-      engineUrl = engine;
-    } else {
-      platformIds.push(arg);
+    if (arg !== ENGINE_FLAG && !arg.startsWith(`${ENGINE_FLAG}=`)) {
+      rest.push(arg);
+      continue;
     }
+    index += arg === ENGINE_FLAG ? 1 : 0;
+    const engine = engineFrom(
+      arg === ENGINE_FLAG ? args[index] : arg.slice(ENGINE_FLAG.length + 1)
+    );
+    if (engine instanceof Error) return engine;
+    engineUrl = engine;
   }
-  return { confirmed, platformIds, engineUrl };
+  return { engineUrl, rest };
+}
+
+// cli/src/commands/init-args.ts
+var CONFIRM_FLAG = "--yes";
+function parseInitArgs(args) {
+  const selection = takeEngineFlag(args);
+  if (selection instanceof Error) return selection;
+  return {
+    confirmed: selection.rest.includes(CONFIRM_FLAG),
+    platformIds: selection.rest.filter((arg) => arg !== CONFIRM_FLAG),
+    engineUrl: selection.engineUrl
+  };
 }
 
 // cli/src/commands/init.ts
@@ -364,6 +372,50 @@ async function init(args, environment) {
   }
   const { lines, failed } = await installAll(chosen, context);
   return output(failed ? 1 : 0, [...engineLine, ...lines]);
+}
+
+// cli/src/deeplinks.ts
+var SERVER_NAME = "locusgraph";
+function base64(text) {
+  return Buffer.from(text, "utf8").toString("base64");
+}
+function cursorInstallLink(mcpUrl) {
+  const config = base64(JSON.stringify({ url: mcpUrl }));
+  return `https://cursor.com/install-mcp?name=${SERVER_NAME}&config=${encodeURIComponent(config)}`;
+}
+function vscodeInstallLink(mcpUrl, host = "vscode.dev") {
+  const config = encodeURIComponent(JSON.stringify({ type: "http", url: mcpUrl }));
+  return `https://${host}/redirect/mcp/install?name=${SERVER_NAME}&config=${config}`;
+}
+function installLinks(engineUrl) {
+  const mcpUrl = mcpUrlFor(engineUrl);
+  return {
+    cursor: cursorInstallLink(mcpUrl),
+    vscode: vscodeInstallLink(mcpUrl),
+    vscodeInsiders: vscodeInstallLink(mcpUrl, "insiders.vscode.dev")
+  };
+}
+
+// cli/src/commands/links.ts
+function links(args) {
+  const selection = takeEngineFlag(args);
+  if (selection instanceof Error) return { exitCode: 1, stderr: `${selection.message}
+` };
+  if (selection.rest.length > 0) {
+    return { exitCode: 1, stderr: `unexpected argument: ${selection.rest.join(" ")}
+` };
+  }
+  const { cursor: cursor2, vscode: vscode2, vscodeInsiders } = installLinks(selection.engineUrl);
+  const engineLine = selection.engineUrl === DEFAULT_ENGINE_URL ? [] : [`engine: ${selection.engineUrl}`];
+  const lines = [
+    ...engineLine,
+    `Cursor:           ${cursor2}`,
+    `VS Code:          ${vscode2}`,
+    `VS Code Insiders: ${vscodeInsiders}`,
+    "These install the MCP server only. Run lg init cursor or lg init vscode for the rules."
+  ];
+  return { exitCode: 0, stdout: `${lines.join("\n")}
+` };
 }
 
 // cli/src/engine.ts
@@ -469,7 +521,8 @@ var COMMANDS = {
     home: homedir(),
     rules: RULES,
     hookScript: fileURLToPath(import.meta.url)
-  })
+  }),
+  links: async (args) => links(args)
 };
 async function main(argv) {
   const [name = "", ...args] = argv;
