@@ -21,6 +21,9 @@ reached through the `locusgraph` MCP server.
 - Use a stable `context_id` in `type:name` form, such as `decision:use_postgres` or
   `preference:no_code_comments`. One id holds one memory. Update it with `replace: true`.
   Link a new detail to an existing memory with `extends`.
+- For knowledge about one repository, prefix the name with the repository's directory name,
+  such as `decision:engine.use_d1_batch_only`, and add `project:<repo>` to `related_to`.
+  Session-start recall boosts `project:<repo>`, so linked memories surface first.
 - Put one concise sentence in `payload.data`. Search matches on that text.
 - Set `source: "user"` when the user said it, `"assistant"` when you inferred it.
 - Store at most a few memories per session. Never store secrets, tokens, credentials or

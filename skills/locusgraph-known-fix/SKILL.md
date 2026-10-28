@@ -1,0 +1,27 @@
+---
+name: locusgraph-known-fix
+description: Check memory for an error before debugging it, and save the fix once it works. Use when a command, test or build fails with an error message, when the user pastes a stack trace, or right after a non-obvious bug is fixed.
+---
+
+# Known fix
+
+## Before debugging
+
+Call `retrieve_memories` with the most specific line of the error: the exception type and message, without paths, line numbers, ids or timestamps. Use `format: "toon"`, `limit: 3`, `context_types: { "fix": [] }`.
+
+If a match describes the same failure, try its fix first and say that it came from memory.
+
+## After the fix works
+
+Save it only when the cause was not obvious from the error message, and only after the failing command passes.
+
+1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`.
+2. Call `store_event`:
+   - `context_id`: `fix:<repo>.<short_snake_case_symptom>`
+   - `event_kind`: `knowledge`
+   - `source`: `tool` (the passing command verified it)
+   - `related_to`: `["project:<repo>"]`
+   - `payload`: `{ "data": "<symptom> is caused by <cause>; fix: <fix>", "error": "<the error line, normalized as above>", "verified_by": "<the command that now passes>" }`
+3. Tell the user the fix is saved under that id.
+
+Do not save typos, missing imports or anything the error message already explained.

@@ -22,11 +22,11 @@ function git(cwd, ...args) {
   }
 }
 
-export function workspaceQuery(cwd) {
-  const root = git(cwd, "rev-parse", "--show-toplevel") || cwd;
+export function workspace(cwd) {
+  const repo = basename(git(cwd, "rev-parse", "--show-toplevel") || cwd);
   const branch = git(cwd, "branch", "--show-current");
   const recentSubjects = git(cwd, "log", "-5", "--format=%s");
-  return [basename(root), branch, recentSubjects].filter(Boolean).join("\n");
+  return { repo, query: [repo, branch, recentSubjects].filter(Boolean).join("\n") };
 }
 
 async function readHookInput() {
@@ -40,7 +40,7 @@ async function readHookInput() {
   }
 }
 
-export async function fetchMemories(env, query) {
+export async function fetchMemories(env, { repo, query }) {
   if (!env.LOCUSGRAPH_TOKEN || !env.LOCUSGRAPH_GRAPH_ID) return "";
   const baseUrl = (env.LOCUSGRAPH_URL || "https://api.locusgraph.com").replace(/\/+$/, "");
   try {
@@ -55,6 +55,7 @@ export async function fetchMemories(env, query) {
         query,
         limit: RECALL_LIMIT,
         format: "toon",
+        boost_context_ids: [`project:${repo}`, `handoff:${repo}`],
       }),
       signal: AbortSignal.timeout(RECALL_TIMEOUT_MS),
     });
@@ -77,7 +78,7 @@ export function guardVerdict(env, toolName) {
 }
 
 async function recall(input, { afterCompact }) {
-  const memories = await fetchMemories(process.env, workspaceQuery(input.cwd || process.cwd()));
+  const memories = await fetchMemories(process.env, workspace(input.cwd || process.cwd()));
   const sections = [];
   if (memories !== "") sections.push(`LocusGraph memories for this workspace:\n${memories}`);
   if (afterCompact) sections.push(STORE_AFTER_COMPACT);

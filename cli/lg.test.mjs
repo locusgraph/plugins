@@ -74,20 +74,26 @@ test("fetchMemories posts a toon query for the graph", async () => {
 
   const memories = await fetchMemories(
     { LOCUSGRAPH_URL: `http://127.0.0.1:${port}/`, LOCUSGRAPH_TOKEN: "t", LOCUSGRAPH_GRAPH_ID: "g" },
-    "repo",
+    { repo: "engine", query: "engine\ndev" },
   );
   server.close();
 
   assert.equal(memories, "decision:use_d1");
   assert.equal(received.path, "/v1/memories");
   assert.equal(received.auth, "Bearer t");
-  assert.deepEqual(received.body, { graph_id: "g", query: "repo", limit: 6, format: "toon" });
+  assert.deepEqual(received.body, {
+    graph_id: "g",
+    query: "engine\ndev",
+    limit: 6,
+    format: "toon",
+    boost_context_ids: ["project:engine", "handoff:engine"],
+  });
 });
 
 test("fetchMemories returns empty on a failed request", async () => {
   const memories = await fetchMemories(
     { LOCUSGRAPH_URL: "http://127.0.0.1:9", LOCUSGRAPH_TOKEN: "t", LOCUSGRAPH_GRAPH_ID: "g" },
-    "repo",
+    { repo: "engine", query: "engine" },
   );
   assert.equal(memories, "");
 });

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +31,13 @@ const outputs = {
   "claude-code/hooks/lg.mjs": cli,
   "cursor/.cursor/hooks/lg.mjs": cli,
 };
+
+for (const skill of await readdir(join(root, "skills"))) {
+  outputs[`claude-code/skills/${skill}/SKILL.md`] = await readFile(
+    join(root, "skills", skill, "SKILL.md"),
+    "utf8",
+  );
+}
 
 const checkOnly = process.argv.includes("--check");
 const stale = [];
