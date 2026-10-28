@@ -1,8 +1,10 @@
 {
   "name": "@locusgraph/cli",
   "version": "0.1.0",
-  "private": true,
+  "description": "Install LocusGraph memory into Claude Code, Cursor, Codex, OpenCode, Gemini CLI and VS Code",
   "type": "module",
   "bin": { "lg": "./lg.mjs" },
-  "engines": { "node": ">=18" }
+  "files": ["lg.mjs", "init.mjs", "rules.md"],
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "git+https://github.com/locusgraph/plugins.git", "directory": "cli" }
 }

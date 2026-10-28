@@ -38,6 +38,22 @@ call.
 
 ## Install
 
+One command, for every agent it finds in the project and home directory:
+
+```
+npx @locusgraph/cli init
+npx @locusgraph/cli init cursor codex
+```
+
+It merges into existing `mcp.json`, `opencode.json`, `.gemini/settings.json`,
+`~/.codex/config.toml`, `AGENTS.md`, `GEMINI.md` and `copilot-instructions.md` rather than
+overwriting them. The rules sit between `<!-- locusgraph:start -->` and
+`<!-- locusgraph:end -->`, so a rerun updates that block and nothing else. A config with
+comments is refused, not rewritten. Codex is configured in `~/.codex/config.toml`, which is
+global; every other platform is configured per project.
+
+The per-platform steps below do the same by hand.
+
 Sign-in is OAuth. The first tool call opens the browser, and the consent screen picks the
 graph the token is scoped to.
 
@@ -85,7 +101,8 @@ Copy `vscode/.vscode/mcp.json` and `vscode/.github/copilot-instructions.md` into
 ## Develop
 
 `rules/memory.md` is the one source for every rules file, and `cli/lg.mjs` is the one source
-for every hook script. Edit those, then regenerate:
+for every hook script. `cli/` is the `@locusgraph/cli` package: `lg recall` and `lg guard`
+run from hooks, `lg init` installs. Edit those, then regenerate:
 
 ```
 npm run build

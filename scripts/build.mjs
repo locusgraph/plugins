@@ -27,6 +27,7 @@ const outputs = {
   "opencode/AGENTS.md": GENERATED + rules,
   "gemini/GEMINI.md": GENERATED + rules,
   "vscode/.github/copilot-instructions.md": GENERATED + rules,
+  "cli/rules.md": rules,
   "claude-code/hooks/lg.mjs": cli,
   "cursor/.cursor/hooks/lg.mjs": cli,
 };

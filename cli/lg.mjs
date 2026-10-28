@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -103,20 +104,23 @@ function guard(input, { dialect }) {
 }
 
 const COMMANDS = {
-  recall: (input, flags) => recall(input, { afterCompact: flags.has("--after-compact") }),
-  guard: (input, flags) => guard(input, { dialect: flags.has("--cursor") ? "cursor" : "claude" }),
+  recall: async (args) =>
+    recall(await readHookInput(), { afterCompact: args.includes("--after-compact") }),
+  guard: async (args) =>
+    guard(await readHookInput(), { dialect: args.includes("--cursor") ? "cursor" : "claude" }),
+  init: async (args) => (await import("./init.mjs")).init(args),
 };
 
 async function main(argv) {
   const [name, ...rest] = argv;
   const command = COMMANDS[name];
   if (command === undefined) {
-    process.stderr.write(`usage: lg <${Object.keys(COMMANDS).join("|")}> [flags]\n`);
+    process.stderr.write(`usage: lg <${Object.keys(COMMANDS).join("|")}> [args]\n`);
     return 1;
   }
-  return command(await readHookInput(), new Set(rest));
+  return command(rest);
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   process.exitCode = await main(process.argv.slice(2));
 }

@@ -91,3 +91,16 @@ test("fetchMemories returns empty on a failed request", async () => {
   );
   assert.equal(memories, "");
 });
+
+test("runs when started through a symlink, as npm bin does", async () => {
+  const { mkdtemp, symlink } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const link = join(await mkdtemp(join(tmpdir(), "lg-bin-")), "lg");
+  await symlink(lg, link);
+  const result = spawnSync(process.execPath, [link, "guard"], {
+    input: JSON.stringify({ tool_name: "observe" }),
+    encoding: "utf8",
+    env: { PATH: process.env.PATH },
+  });
+  assert.equal(result.status, 2);
+});
