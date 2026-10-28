@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "locusgraph": {
+      "type": "http",
+      "url": "https://api.locusgraph.com/mcp?tools=free"
+    }
+  }
+}

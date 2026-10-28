@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeMCPExecution": [{ "command": "node .cursor/hooks/lg.mjs guard --cursor" }]
+  }
+}

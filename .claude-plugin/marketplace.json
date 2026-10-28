@@ -1,0 +1,14 @@
+{
+  "name": "locusgraph",
+  "description": "LocusGraph plugins for Claude Code",
+  "owner": {
+    "name": "LocusGraph"
+  },
+  "plugins": [
+    {
+      "name": "locusgraph",
+      "source": "./claude-code",
+      "description": "Long-term memory for Claude Code, backed by LocusGraph"
+    }
+  ]
+}

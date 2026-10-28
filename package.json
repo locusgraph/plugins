@@ -1,0 +1,9 @@
+{
+  "name": "locusgraph-plugins",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check && node --test cli/lg.test.mjs"
+  }
+}

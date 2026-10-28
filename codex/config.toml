@@ -1,0 +1,2 @@
+[mcp_servers.locusgraph]
+url = "https://api.locusgraph.com/mcp?tools=free"

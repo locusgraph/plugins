@@ -1,0 +1,7 @@
+{
+  "name": "locusgraph",
+  "version": "0.1.0",
+  "description": "Long-term memory for Claude Code, backed by LocusGraph",
+  "author": { "name": "LocusGraph" },
+  "homepage": "https://locusgraph.com"
+}

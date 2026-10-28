@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "locusgraph": {
+      "type": "remote",
+      "url": "https://api.locusgraph.com/mcp?tools=free",
+      "enabled": true
+    }
+  }
+}

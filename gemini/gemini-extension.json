@@ -1,0 +1,11 @@
+{
+  "name": "locusgraph",
+  "version": "0.1.0",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "locusgraph": {
+      "httpUrl": "https://api.locusgraph.com/mcp?tools=free",
+      "excludeTools": ["observe", "deep_recall"]
+    }
+  }
+}
