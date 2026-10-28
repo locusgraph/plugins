@@ -87,6 +87,7 @@ export const PLATFORMS = {
   },
   codex: {
     label: "Codex",
+    global: "~/.codex/config.toml",
     detect: ({ home }) => existsSync(join(home, ".codex")),
     install: async ({ cwd, home, rules }) => {
       const config = join(home, ".codex/config.toml");
@@ -145,17 +146,30 @@ function display(path, cwd, home) {
 }
 
 export async function init(args, { cwd = process.cwd(), home = homedir(), out = console.log } = {}) {
-  const unknown = args.filter((name) => !(name in PLATFORMS));
+  const confirmed = args.includes("--yes");
+  const named = args.filter((arg) => arg !== "--yes");
+  const unknown = named.filter((name) => !(name in PLATFORMS));
   if (unknown.length > 0) {
     out(`unknown platform: ${unknown.join(", ")}. Choose from: ${Object.keys(PLATFORMS).join(", ")}`);
     return 1;
   }
 
   const context = { cwd, home, rules: await readFile(join(here, "rules.md"), "utf8") };
-  const chosen = args.length > 0 ? args : Object.keys(PLATFORMS).filter((name) => PLATFORMS[name].detect(context));
+  const chosen =
+    named.length > 0 ? named : Object.keys(PLATFORMS).filter((name) => PLATFORMS[name].detect(context));
   if (chosen.length === 0) {
     out(`no supported agent found here. Name one: lg init <${Object.keys(PLATFORMS).join("|")}>`);
     return 1;
+  }
+
+  if (named.length === 0 && !confirmed) {
+    out("found:");
+    for (const name of chosen) {
+      const platform = PLATFORMS[name];
+      out(`  ${name.padEnd(12)}${platform.label}${platform.global === undefined ? "" : ` (also writes ${platform.global}, which is global)`}`);
+    }
+    out(`nothing written. Run lg init --yes to install all of them, or name the ones you want: lg init ${chosen[0]}`);
+    return 0;
   }
 
   let failed = false;

@@ -30,10 +30,30 @@ test("rejects an unknown platform before writing anything", async () => {
   await assert.rejects(read(".cursor/mcp.json"));
 });
 
-test("detects a platform by its folder and installs only that one", async () => {
+test("detection alone only shows the plan and writes nothing", async () => {
+  const { cwd, home, run, lines, read } = await workspace();
+  await mkdir(join(cwd, ".vscode"));
+  await mkdir(join(home, ".codex"));
+
+  assert.equal(await run([]), 0);
+
+  assert.ok(lines.some((line) => /vscode\s+VS Code Copilot$/.test(line)));
+  assert.ok(lines.some((line) => /codex.*~\/\.codex\/config\.toml, which is global/.test(line)));
+  assert.match(lines.at(-1), /nothing written. Run lg init --yes/);
+  await assert.rejects(read(".vscode/mcp.json"));
+  await assert.rejects(readFile(join(home, ".codex/config.toml"), "utf8"));
+});
+
+test("naming a platform installs it without --yes", async () => {
+  const { run, read } = await workspace();
+  assert.equal(await run(["vscode"]), 0);
+  assert.equal(JSON.parse(await read(".vscode/mcp.json")).servers.locusgraph.url, MCP_URL);
+});
+
+test("--yes installs every detected platform and only those", async () => {
   const { cwd, run, read } = await workspace();
   await mkdir(join(cwd, ".vscode"));
-  assert.equal(await run([]), 0);
+  assert.equal(await run(["--yes"]), 0);
   assert.equal(JSON.parse(await read(".vscode/mcp.json")).servers.locusgraph.url, MCP_URL);
   await assert.rejects(read(".cursor/mcp.json"));
 });

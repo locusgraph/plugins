@@ -41,8 +41,9 @@ call.
 One command, for every agent it finds in the project and home directory:
 
 ```
-npx @locusgraph/cli init
-npx @locusgraph/cli init cursor codex
+npx @locusgraph/cli init               # lists what it found, writes nothing
+npx @locusgraph/cli init --yes         # installs everything it found
+npx @locusgraph/cli init cursor codex  # installs only these, no --yes needed
 ```
 
 It merges into existing `mcp.json`, `opencode.json`, `.gemini/settings.json`,
