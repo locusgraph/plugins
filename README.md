@@ -121,16 +121,39 @@ Copy `vscode/.vscode/mcp.json` and `vscode/.github/copilot-instructions.md` into
 
 ## Develop
 
-`rules/memory.md` is the one source for every rules file, and `cli/lg.mjs` is the one source
-for every hook script. `cli/` is the `@locusgraph/cli` package: `lg recall` and `lg guard`
-run from hooks, `lg init` installs. Edit those, then regenerate:
+The CLI is TypeScript in `cli/src`, bundled by esbuild into one `lg.mjs` that runs on Node 18
+with no dependencies. Development needs Node 22.18 or later, which runs `scripts/build.ts`
+directly.
 
 ```
+cli/src/
+  bin.ts              process entry: runs main, writes stdout and stderr, sets the exit code
+  main.ts             command table: recall, guard, init
+  commands/           one file per command, each returning a CommandResult and doing no I/O to the terminal
+  platforms/          one file per agent: detect() and install(); index.ts lists them
+  config.ts           engine URL, MCP URL, paid tool names
+  env.ts              LOCUSGRAPH_* variables, read once
+  engine.ts           the one REST call: POST /v1/memories
+  files.ts            JSON merge, rules block, TOML table
+  hook-input.ts       the JSON a hook receives on stdin
+  paid-tools.ts       which tool calls the guard refuses
+  workspace.ts        repo name and recall query from git
+  generated/rules.ts  rules/memory.md as a string, written by the build
+cli/test/             vitest; bundle.test.ts runs the committed hook bundles
+```
+
+`rules/memory.md` is the one source for every rules file, and `skills/` for every skill.
+`npm run build` regenerates the rules files, copies the skills and licence, and bundles the CLI
+into `claude-code/hooks/lg.mjs`, `cursor/.cursor/hooks/lg.mjs` and `cli/dist/lg.mjs`.
+
+```
+npm ci
 npm run build
-npm run check
+npm run check    # build --check, biome, tsc, vitest
 ```
 
-`check` fails when a generated file is out of date, and runs the CLI tests.
+`check` fails when a committed generated file is out of date. Adding a platform is one file in
+`cli/src/platforms/` and one line in its `index.ts`.
 
 ## Unverified
 

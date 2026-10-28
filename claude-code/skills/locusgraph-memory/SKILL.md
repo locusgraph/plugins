@@ -3,7 +3,7 @@ name: locusgraph-memory
 description: Recall and store long-term memory with LocusGraph. Use before non-trivial tasks, when the user asks why something was decided, or when a durable decision, constraint or preference comes up.
 ---
 
-<!-- Generated from rules/memory.md by scripts/build.mjs. Do not edit. -->
+<!-- Generated from rules/memory.md by scripts/build.ts. Do not edit. -->
 
 # LocusGraph memory
 

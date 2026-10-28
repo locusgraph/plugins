@@ -1,4 +1,4 @@
-<!-- Generated from rules/memory.md by scripts/build.mjs. Do not edit. -->
+<!-- Generated from rules/memory.md by scripts/build.ts. Do not edit. -->
 
 # LocusGraph memory
 
