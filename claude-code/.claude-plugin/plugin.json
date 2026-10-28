@@ -6,5 +6,6 @@
     "name": "LocusGraph"
   },
   "license": "MIT",
-  "homepage": "https://locusgraph.com"
+  "homepage": "https://locusgraph.com",
+  "privacyPolicyUrl": "https://locusgraph.com/privacy"
 }
