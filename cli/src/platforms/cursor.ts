@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { MCP_URL } from "../config.ts";
 import { asObject, mergeJson, withLocusGraphServer, writeText } from "../files.ts";
 import type { Platform } from "./platform.ts";
 
@@ -11,10 +10,10 @@ export const cursor: Platform = {
   id: "cursor",
   label: "Cursor",
   detect: ({ cwd }) => existsSync(join(cwd, ".cursor")),
-  async install({ cwd, rules, hookScript }) {
+  async install({ cwd, rules, hookScript, mcpUrl }) {
     await mergeJson(
       join(cwd, ".cursor/mcp.json"),
-      withLocusGraphServer("mcpServers", { url: MCP_URL }),
+      withLocusGraphServer("mcpServers", { url: mcpUrl }),
     );
     await writeText(
       join(cwd, ".cursor/rules/locusgraph.mdc"),

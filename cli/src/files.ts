@@ -60,13 +60,26 @@ export async function upsertRulesBlock(path: string, rules: string): Promise<voi
   await writeText(path, replaceRulesBlock((await readText(path)) ?? "", rules));
 }
 
-export async function appendTomlTable(
+export function replaceTomlTable(current: string, table: string, body: string): string {
+  const header = `[${table}]`;
+  const section = `${header}\n${body}\n`;
+  const lines = current.split("\n");
+  const start = lines.findIndex((line) => line.trim() === header);
+  if (start === -1) {
+    return `${current === "" ? "" : current.replace(/\n*$/, "\n\n")}${section}`;
+  }
+  const next = lines.findIndex(
+    (line, index) => index > start && line.trimStart().startsWith("["),
+  );
+  const before = lines.slice(0, start).join("\n");
+  const after = next === -1 ? "" : `\n${lines.slice(next).join("\n")}`;
+  return `${before}${before === "" ? "" : "\n"}${section}${after}`;
+}
+
+export async function upsertTomlTable(
   path: string,
   table: string,
   body: string,
 ): Promise<void> {
-  const current = (await readText(path)) ?? "";
-  if (current.includes(`[${table}]`)) return;
-  const separated = current === "" ? "" : current.replace(/\n*$/, "\n\n");
-  await writeText(path, `${separated}[${table}]\n${body}\n`);
+  await writeText(path, replaceTomlTable((await readText(path)) ?? "", table, body));
 }

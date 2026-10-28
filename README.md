@@ -64,7 +64,16 @@ One command, for every agent it finds in the project and home directory:
 npx @locusgraph/cli init               # lists what it found, writes nothing
 npx @locusgraph/cli init --yes         # installs everything it found
 npx @locusgraph/cli init cursor codex  # installs only these, no --yes needed
+npx @locusgraph/cli init cursor --engine dev   # point at api.dev.locusgraph.com
 ```
+
+`--engine` takes `production` (the default), `dev`, or a URL: any `https://` origin, or
+`http://localhost` / `http://127.0.0.1` for a local Worker. Rerunning with another engine
+rewrites the URL in place, including the Codex table.
+
+Claude Code's plugin reads the engine from `LOCUSGRAPH_URL` for both the MCP server and
+session-start recall, so `export LOCUSGRAPH_URL=https://api.dev.locusgraph.com` before
+starting Claude Code switches it; `lg init claude-code --engine dev` prints that line.
 
 It merges into existing `mcp.json`, `opencode.json`, `.gemini/settings.json`,
 `~/.codex/config.toml`, `AGENTS.md`, `GEMINI.md` and `copilot-instructions.md` rather than

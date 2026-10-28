@@ -5,9 +5,26 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 // cli/src/config.ts
-var DEFAULT_ENGINE_URL = "https://api.locusgraph.com";
-var MCP_URL = `${DEFAULT_ENGINE_URL}/mcp?tools=free`;
+var ENGINES = {
+  production: "https://api.locusgraph.com",
+  dev: "https://api.dev.locusgraph.com"
+};
+var DEFAULT_ENGINE_URL = ENGINES.production;
 var PAID_TOOLS = ["observe", "deep_recall"];
+function mcpUrlFor(engineUrl) {
+  return `${engineUrl}/mcp?tools=free`;
+}
+function resolveEngine(value) {
+  if (value in ENGINES) return ENGINES[value];
+  try {
+    const url = new URL(value);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(local && url.protocol === "http:")) return void 0;
+    return url.origin;
+  } catch {
+    return void 0;
+  }
+}
 
 // cli/src/paid-tools.ts
 var PAID_TOOL_NAME = new RegExp(`(^|__)(${PAID_TOOLS.join("|")})$`);
@@ -42,7 +59,7 @@ import { join } from "node:path";
 var claudeCode = {
   id: "claude-code",
   label: "Claude Code",
-  nextStep: "in Claude Code: /plugin marketplace add locusgraph/plugins, then /plugin install locusgraph@locusgraph",
+  nextStep: ({ engineUrl }) => (engineUrl === DEFAULT_ENGINE_URL ? "" : `export LOCUSGRAPH_URL=${engineUrl}, then `) + "in Claude Code: /plugin marketplace add locusgraph/plugins, then /plugin install locusgraph@locusgraph",
   detect: ({ home }) => existsSync(join(home, ".claude")),
   install: async () => []
 };
@@ -100,13 +117,26 @@ ${RULES_END}
 async function upsertRulesBlock(path, rules) {
   await writeText(path, replaceRulesBlock(await readText(path) ?? "", rules));
 }
-async function appendTomlTable(path, table, body) {
-  const current = await readText(path) ?? "";
-  if (current.includes(`[${table}]`)) return;
-  const separated = current === "" ? "" : current.replace(/\n*$/, "\n\n");
-  await writeText(path, `${separated}[${table}]
+function replaceTomlTable(current, table, body) {
+  const header = `[${table}]`;
+  const section = `${header}
 ${body}
-`);
+`;
+  const lines = current.split("\n");
+  const start = lines.findIndex((line) => line.trim() === header);
+  if (start === -1) {
+    return `${current === "" ? "" : current.replace(/\n*$/, "\n\n")}${section}`;
+  }
+  const next = lines.findIndex(
+    (line, index) => index > start && line.trimStart().startsWith("[")
+  );
+  const before = lines.slice(0, start).join("\n");
+  const after = next === -1 ? "" : `
+${lines.slice(next).join("\n")}`;
+  return `${before}${before === "" ? "" : "\n"}${section}${after}`;
+}
+async function upsertTomlTable(path, table, body) {
+  await writeText(path, replaceTomlTable(await readText(path) ?? "", table, body));
 }
 
 // cli/src/platforms/codex.ts
@@ -114,11 +144,11 @@ var codex = {
   id: "codex",
   label: "Codex",
   writesGlobal: "~/.codex/config.toml",
-  nextStep: "codex mcp login locusgraph",
+  nextStep: () => "codex mcp login locusgraph",
   detect: ({ home }) => existsSync2(join2(home, ".codex")),
-  async install({ cwd, home, rules }) {
+  async install({ cwd, home, rules, mcpUrl }) {
     const config = join2(home, ".codex/config.toml");
-    await appendTomlTable(config, "mcp_servers.locusgraph", `url = "${MCP_URL}"`);
+    await upsertTomlTable(config, "mcp_servers.locusgraph", `url = "${mcpUrl}"`);
     await upsertRulesBlock(join2(cwd, "AGENTS.md"), rules);
     return [config, "AGENTS.md"];
   }
@@ -133,10 +163,10 @@ var cursor = {
   id: "cursor",
   label: "Cursor",
   detect: ({ cwd }) => existsSync3(join3(cwd, ".cursor")),
-  async install({ cwd, rules, hookScript }) {
+  async install({ cwd, rules, hookScript, mcpUrl }) {
     await mergeJson(
       join3(cwd, ".cursor/mcp.json"),
-      withLocusGraphServer("mcpServers", { url: MCP_URL })
+      withLocusGraphServer("mcpServers", { url: mcpUrl })
     );
     await writeText(
       join3(cwd, ".cursor/rules/locusgraph.mdc"),
@@ -178,10 +208,10 @@ var gemini = {
   id: "gemini",
   label: "Gemini CLI",
   detect: ({ cwd, home }) => existsSync4(join4(cwd, ".gemini")) || existsSync4(join4(home, ".gemini")),
-  async install({ cwd, rules }) {
+  async install({ cwd, rules, mcpUrl }) {
     await mergeJson(
       join4(cwd, ".gemini/settings.json"),
-      withLocusGraphServer("mcpServers", { httpUrl: MCP_URL, excludeTools: [...PAID_TOOLS] })
+      withLocusGraphServer("mcpServers", { httpUrl: mcpUrl, excludeTools: [...PAID_TOOLS] })
     );
     await upsertRulesBlock(join4(cwd, "GEMINI.md"), rules);
     return [".gemini/settings.json", "GEMINI.md"];
@@ -191,15 +221,14 @@ var gemini = {
 // cli/src/platforms/opencode.ts
 import { existsSync as existsSync5 } from "node:fs";
 import { join as join5 } from "node:path";
-var addServer = withLocusGraphServer("mcp", { type: "remote", url: MCP_URL, enabled: true });
 var opencode = {
   id: "opencode",
   label: "OpenCode",
   detect: ({ cwd, home }) => existsSync5(join5(cwd, "opencode.json")) || existsSync5(join5(home, ".config/opencode")),
-  async install({ cwd, rules }) {
+  async install({ cwd, rules, mcpUrl }) {
     await mergeJson(join5(cwd, "opencode.json"), (config) => ({
       $schema: "https://opencode.ai/config.json",
-      ...addServer(config)
+      ...withLocusGraphServer("mcp", { type: "remote", url: mcpUrl, enabled: true })(config)
     }));
     await upsertRulesBlock(join5(cwd, "AGENTS.md"), rules);
     return ["opencode.json", "AGENTS.md"];
@@ -213,10 +242,10 @@ var vscode = {
   id: "vscode",
   label: "VS Code Copilot",
   detect: ({ cwd }) => existsSync6(join6(cwd, ".vscode")),
-  async install({ cwd, rules }) {
+  async install({ cwd, rules, mcpUrl }) {
     await mergeJson(
       join6(cwd, ".vscode/mcp.json"),
-      withLocusGraphServer("servers", { type: "http", url: MCP_URL })
+      withLocusGraphServer("servers", { type: "http", url: mcpUrl })
     );
     await upsertRulesBlock(join6(cwd, ".github/copilot-instructions.md"), rules);
     return [".vscode/mcp.json", ".github/copilot-instructions.md"];
@@ -236,8 +265,39 @@ function findPlatform(id) {
   return PLATFORMS.find((platform) => platform.id === id);
 }
 
-// cli/src/commands/init.ts
+// cli/src/commands/init-args.ts
 var CONFIRM_FLAG = "--yes";
+var ENGINE_FLAG = "--engine";
+var ENGINE_CHOICES = `${Object.keys(ENGINES).join(", ")}, or an https:// URL`;
+function engineFrom(value) {
+  if (value === void 0 || value === "") {
+    return new Error(`${ENGINE_FLAG} needs a value: ${ENGINE_CHOICES}`);
+  }
+  return resolveEngine(value) ?? new Error(`unknown engine: ${value}. Choose ${ENGINE_CHOICES}`);
+}
+function parseInitArgs(args) {
+  let confirmed = false;
+  let engineUrl = DEFAULT_ENGINE_URL;
+  const platformIds = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (arg === CONFIRM_FLAG) {
+      confirmed = true;
+    } else if (arg === ENGINE_FLAG || arg.startsWith(`${ENGINE_FLAG}=`)) {
+      index += arg === ENGINE_FLAG ? 1 : 0;
+      const engine = engineFrom(
+        arg === ENGINE_FLAG ? args[index] : arg.slice(ENGINE_FLAG.length + 1)
+      );
+      if (engine instanceof Error) return engine;
+      engineUrl = engine;
+    } else {
+      platformIds.push(arg);
+    }
+  }
+  return { confirmed, platformIds, engineUrl };
+}
+
+// cli/src/commands/init.ts
 var PLATFORM_IDS = PLATFORMS.map((platform) => platform.id);
 function displayPath(path, { cwd, home }) {
   if (!path.startsWith("/")) return path;
@@ -264,7 +324,8 @@ async function installAll(platforms, context) {
         (path) => displayPath(path, context)
       );
       lines.push(`\u2714 ${platform.label}${written.length > 0 ? `: ${written.join(", ")}` : ""}`);
-      if (platform.nextStep !== void 0) lines.push(`  next: ${platform.nextStep}`);
+      const next = platform.nextStep?.(context);
+      if (next !== void 0 && next !== "") lines.push(`  next: ${next}`);
     } catch (error) {
       failed = true;
       lines.push(
@@ -280,24 +341,29 @@ var output = (exitCode, lines) => ({
   stdout: `${lines.join("\n")}
 `
 });
-async function init(args, context) {
-  const confirmed = args.includes(CONFIRM_FLAG);
-  const named = args.filter((arg) => arg !== CONFIRM_FLAG);
-  const unknown = named.filter((id) => findPlatform(id) === void 0);
+async function init(args, environment) {
+  const parsed = parseInitArgs(args);
+  if (parsed instanceof Error) return output(1, [parsed.message]);
+  const { confirmed, platformIds, engineUrl } = parsed;
+  const unknown = platformIds.filter((id) => findPlatform(id) === void 0);
   if (unknown.length > 0) {
     return output(1, [
       `unknown platform: ${unknown.join(", ")}. Choose from: ${PLATFORM_IDS.join(", ")}`
     ]);
   }
-  const chosen = named.length > 0 ? named.flatMap((id) => findPlatform(id) ?? []) : PLATFORMS.filter((platform) => platform.detect(context));
+  const context = { ...environment, engineUrl, mcpUrl: mcpUrlFor(engineUrl) };
+  const chosen = platformIds.length > 0 ? platformIds.flatMap((id) => findPlatform(id) ?? []) : PLATFORMS.filter((platform) => platform.detect(context));
   if (chosen.length === 0) {
     return output(1, [
       `no supported agent found here. Name one: lg init <${PLATFORM_IDS.join("|")}>`
     ]);
   }
-  if (named.length === 0 && !confirmed) return output(0, describePlan(chosen));
+  const engineLine = engineUrl === DEFAULT_ENGINE_URL ? [] : [`engine: ${engineUrl}`];
+  if (platformIds.length === 0 && !confirmed) {
+    return output(0, [...engineLine, ...describePlan(chosen)]);
+  }
   const { lines, failed } = await installAll(chosen, context);
-  return output(failed ? 1 : 0, lines);
+  return output(failed ? 1 : 0, [...engineLine, ...lines]);
 }
 
 // cli/src/engine.ts

@@ -1,13 +1,15 @@
 import { relative } from "node:path";
+import { DEFAULT_ENGINE_URL, mcpUrlFor } from "../config.ts";
 import {
   findPlatform,
+  type InitEnvironment,
   type InstallContext,
   PLATFORMS,
   type Platform,
 } from "../platforms/index.ts";
+import { CONFIRM_FLAG, parseInitArgs } from "./init-args.ts";
 import type { CommandResult } from "./result.ts";
 
-const CONFIRM_FLAG = "--yes";
 const PLATFORM_IDS = PLATFORMS.map((platform) => platform.id);
 
 function displayPath(path: string, { cwd, home }: InstallContext): string {
@@ -44,7 +46,8 @@ async function installAll(
         displayPath(path, context),
       );
       lines.push(`✔ ${platform.label}${written.length > 0 ? `: ${written.join(", ")}` : ""}`);
-      if (platform.nextStep !== undefined) lines.push(`  next: ${platform.nextStep}`);
+      const next = platform.nextStep?.(context);
+      if (next !== undefined && next !== "") lines.push(`  next: ${next}`);
     } catch (error) {
       failed = true;
       lines.push(
@@ -63,21 +66,23 @@ const output = (exitCode: number, lines: readonly string[]): CommandResult => ({
 
 export async function init(
   args: readonly string[],
-  context: InstallContext,
+  environment: InitEnvironment,
 ): Promise<CommandResult> {
-  const confirmed = args.includes(CONFIRM_FLAG);
-  const named = args.filter((arg) => arg !== CONFIRM_FLAG);
+  const parsed = parseInitArgs(args);
+  if (parsed instanceof Error) return output(1, [parsed.message]);
+  const { confirmed, platformIds, engineUrl } = parsed;
 
-  const unknown = named.filter((id) => findPlatform(id) === undefined);
+  const unknown = platformIds.filter((id) => findPlatform(id) === undefined);
   if (unknown.length > 0) {
     return output(1, [
       `unknown platform: ${unknown.join(", ")}. Choose from: ${PLATFORM_IDS.join(", ")}`,
     ]);
   }
 
+  const context: InstallContext = { ...environment, engineUrl, mcpUrl: mcpUrlFor(engineUrl) };
   const chosen =
-    named.length > 0
-      ? named.flatMap((id) => findPlatform(id) ?? [])
+    platformIds.length > 0
+      ? platformIds.flatMap((id) => findPlatform(id) ?? [])
       : PLATFORMS.filter((platform) => platform.detect(context));
   if (chosen.length === 0) {
     return output(1, [
@@ -85,8 +90,11 @@ export async function init(
     ]);
   }
 
-  if (named.length === 0 && !confirmed) return output(0, describePlan(chosen));
+  const engineLine = engineUrl === DEFAULT_ENGINE_URL ? [] : [`engine: ${engineUrl}`];
+  if (platformIds.length === 0 && !confirmed) {
+    return output(0, [...engineLine, ...describePlan(chosen)]);
+  }
 
   const { lines, failed } = await installAll(chosen, context);
-  return output(failed ? 1 : 0, lines);
+  return output(failed ? 1 : 0, [...engineLine, ...lines]);
 }

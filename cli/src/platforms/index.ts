@@ -19,4 +19,4 @@ export function findPlatform(id: string): Platform | undefined {
   return PLATFORMS.find((platform) => platform.id === id);
 }
 
-export type { InstallContext, Platform } from "./platform.ts";
+export type { InitEnvironment, InstallContext, Platform } from "./platform.ts";
