@@ -144,3 +144,7 @@ client. Confirm before announcing support:
 | Gemini CLI | `excludeTools` applies to MCP tools inside an extension |
 | All | the engine's OAuth issuer accepts each client's redirect URI and registration |
 | Claude Code | `privacyPolicyUrl` in `plugin.json` before submitting to the plugin directory |
+
+## License
+
+MIT. See `LICENSE`.

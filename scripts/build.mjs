@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const rules = await readFile(join(root, "rules/memory.md"), "utf8");
 const cli = await readFile(join(root, "cli/lg.mjs"), "utf8");
+const license = await readFile(join(root, "LICENSE"), "utf8");
 
 const GENERATED = "<!-- Generated from rules/memory.md by scripts/build.mjs. Do not edit. -->\n\n";
 
@@ -28,6 +29,8 @@ const outputs = {
   "gemini/GEMINI.md": GENERATED + rules,
   "vscode/.github/copilot-instructions.md": GENERATED + rules,
   "cli/rules.md": rules,
+  "cli/LICENSE": license,
+  "claude-code/LICENSE": license,
   "claude-code/hooks/lg.mjs": cli,
   "cursor/.cursor/hooks/lg.mjs": cli,
 };
