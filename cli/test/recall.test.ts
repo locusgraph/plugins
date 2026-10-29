@@ -8,16 +8,34 @@ import { testEnv } from "./env.ts";
 const workspace = { repo: "engine", query: "engine\ndev" };
 
 describe("recall", () => {
-  it("prints nothing when memory has nothing", async () => {
-    const result = await recall({}, testEnv(), { afterCompact: false, fetch: async () => "" });
+  const withKey = testEnv({ token: "t", graphId: "g" });
+  const noFetch = async () => {
+    throw new Error("must not call the REST API without a key");
+  };
 
-    expect(result).toEqual({ exitCode: 0 });
-  });
-
-  it("prints the memories it found", async () => {
+  it("asks the agent to recall through MCP when there is no key", async () => {
     const result = await recall({}, testEnv(), {
       afterCompact: false,
+      fetch: noFetch,
+      workspace,
+    });
+    const [, json] = result.stdout?.match(/with these arguments: (\{.*?\})\. /) ?? [];
+
+    expect(result.stdout).toMatch(/call the LocusGraph `retrieve_memories` tool once/);
+    expect(result.stdout).toMatch(/If the LocusGraph tools are not available, skip this/);
+    expect(JSON.parse(json ?? "")).toEqual({
+      query: "engine\ndev",
+      limit: 6,
+      format: "toon",
+      boost_context_ids: ["project:engine", "handoff:engine"],
+    });
+  });
+
+  it("prints the memories itself when a key is set", async () => {
+    const result = await recall({}, withKey, {
+      afterCompact: false,
       fetch: async () => "decision:engine.use_d1",
+      workspace,
     });
 
     expect(result.stdout).toBe(
@@ -25,10 +43,36 @@ describe("recall", () => {
     );
   });
 
-  it("asks for a bounded store after compaction even with no memories", async () => {
-    const result = await recall({}, testEnv(), { afterCompact: true, fetch: async () => "" });
+  it("prints nothing when a key is set and memory has nothing", async () => {
+    const result = await recall({}, withKey, {
+      afterCompact: false,
+      fetch: async () => "",
+      workspace,
+    });
+
+    expect(result).toEqual({ exitCode: 0 });
+  });
+
+  it("asks for a bounded store after compaction", async () => {
+    const result = await recall({}, withKey, {
+      afterCompact: true,
+      fetch: async () => "",
+      workspace,
+    });
 
     expect(result.stdout).toMatch(/at most 3/);
+  });
+
+  it("asks for both the recall and the store after compaction without a key", async () => {
+    const result = await recall({}, testEnv(), {
+      afterCompact: true,
+      fetch: noFetch,
+      workspace,
+    });
+
+    expect(result.stdout).toMatch(
+      /retrieve_memories[\s\S]*\n\nLocusGraph: the conversation was just compacted/,
+    );
   });
 });
 

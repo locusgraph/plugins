@@ -418,22 +418,25 @@ function links(args) {
 ` };
 }
 
+// cli/src/recall-query.ts
+function recallArguments({ repo, query }) {
+  return {
+    query,
+    limit: 6,
+    format: "toon",
+    boost_context_ids: [`project:${repo}`, `handoff:${repo}`]
+  };
+}
+
 // cli/src/engine.ts
-var RECALL_LIMIT = 6;
 var RECALL_TIMEOUT_MS = 4e3;
-var fetchMemories = async (env, { repo, query }) => {
+var fetchMemories = async (env, workspace) => {
   if (env.token === void 0 || env.graphId === void 0) return "";
   try {
     const response = await fetch(`${env.engineUrl}/v1/memories`, {
       method: "POST",
       headers: { authorization: `Bearer ${env.token}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        graph_id: env.graphId,
-        query,
-        limit: RECALL_LIMIT,
-        format: "toon",
-        boost_context_ids: [`project:${repo}`, `handoff:${repo}`]
-      }),
+      body: JSON.stringify({ graph_id: env.graphId, ...recallArguments(workspace) }),
       signal: AbortSignal.timeout(RECALL_TIMEOUT_MS)
     });
     if (!response.ok) return "";
@@ -467,12 +470,23 @@ function describeWorkspace(cwd) {
 
 // cli/src/commands/recall.ts
 var STORE_AFTER_COMPACT = "LocusGraph: the conversation was just compacted. Before continuing, store at most 3 durable decisions, constraints or user corrections from the summary above with `store_event` (source: user or assistant, a stable `type:name` context_id). Skip anything already in CLAUDE.md, AGENTS.md or git history. If nothing qualifies, store nothing.";
-async function recall(input, env, { afterCompact, fetch: fetch2 = fetchMemories }) {
-  const memories = await fetch2(env, describeWorkspace(input.cwd || process.cwd()));
-  const sections = [];
-  if (memories !== "") sections.push(`LocusGraph memories for this workspace:
-${memories}`);
-  if (afterCompact) sections.push(STORE_AFTER_COMPACT);
+function recallInstruction(workspace) {
+  return `LocusGraph: before starting the user's first task, call the LocusGraph \`retrieve_memories\` tool once with these arguments: ${JSON.stringify(recallArguments(workspace))}. Treat what it returns as background on this repository and do not repeat the call for it. If the LocusGraph tools are not available, skip this.`;
+}
+function hasRestCredentials(env) {
+  return env.token !== void 0 && env.graphId !== void 0;
+}
+async function recallSection(env, workspace, fetch2) {
+  if (!hasRestCredentials(env)) return recallInstruction(workspace);
+  const memories = await fetch2(env, workspace);
+  return memories === "" ? "" : `LocusGraph memories for this workspace:
+${memories}`;
+}
+async function recall(input, env, { afterCompact, fetch: fetch2 = fetchMemories, workspace }) {
+  const sections = [
+    await recallSection(env, workspace ?? describeWorkspace(input.cwd || process.cwd()), fetch2),
+    afterCompact ? STORE_AFTER_COMPACT : ""
+  ].filter((section) => section !== "");
   return sections.length === 0 ? { exitCode: 0 } : { exitCode: 0, stdout: `${sections.join("\n\n")}
 ` };
 }

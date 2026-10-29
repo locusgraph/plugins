@@ -106,9 +106,13 @@ graph the token is scoped to.
 /plugin install locusgraph@locusgraph
 ```
 
-Session-start recall calls the REST API directly, because a hook cannot reuse the MCP OAuth
-token. It needs a graph-scoped key from the console. Without these variables the hook stays
-silent and the MCP tools still work.
+Nothing else to configure: the consent screen is the only setup. At session start the hook
+asks Claude to call `retrieve_memories` once for this repository, and that call goes through
+the MCP server's OAuth token.
+
+A hook cannot reuse that token, so recall costs one tool call. To skip it, give the hook a
+graph-scoped key from the console; it then fetches the memories itself over REST and injects
+them directly. This is optional, and useful in CI where nobody can sign in.
 
 ```
 export LOCUSGRAPH_TOKEN=<key>
