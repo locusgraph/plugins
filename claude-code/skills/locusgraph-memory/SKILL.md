@@ -27,8 +27,13 @@ reached through the `locusgraph` MCP server.
   `preference:no_code_comments`. One id holds one memory. Update it with `replace: true`.
   Link a new detail to an existing memory with `extends`.
 - For knowledge about one repository, prefix the name with the repository's directory name,
-  such as `decision:engine.use_d1_batch_only`, and add `project:<repo>` to `related_to`.
-  Session-start recall boosts `project:<repo>`, so linked memories surface first.
+  joined by a double underscore, such as `decision:engine__use_d1_batch_only`, and add
+  `project:<repo>` to `related_to`. Session-start recall boosts `project:<repo>`, so linked
+  memories surface first.
+- Build ids only from `a-z`, `0-9`, `_`, `-` and the one `:`. The engine lowercases an id and
+  turns any other character into `_` when it stores it, but looks ids up exactly as sent, so an
+  id with a dot or a capital is stored under one name and searched for under another. The
+  same goes for `<repo>`: `My.Repo` is `my_repo`.
 - Put one concise sentence in `payload.data`. Search matches on that text.
 - Set `source: "user"` when the user said it, `"assistant"` when you inferred it.
 - Store at most a few memories per session. Never store secrets, tokens, credentials or

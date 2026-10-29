@@ -7,7 +7,7 @@ description: Save where the work stopped so the next session, on any machine or 
 
 One handoff per repository, overwritten each time. It costs one write.
 
-1. Find the repository name: the basename of `git rev-parse --show-toplevel`. Call it `<repo>`.
+1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form.
 2. Write the handoff from this session. Keep it under 120 words:
    - **Goal**: what the user is trying to finish.
    - **Done**: what changed, with file paths or commit hashes.

@@ -18,8 +18,15 @@ function git(cwd: string, ...args: string[]): string {
   }
 }
 
+export function contextSafeName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_");
+}
+
 export function describeWorkspace(cwd: string): Workspace {
-  const repo = basename(git(cwd, "rev-parse", "--show-toplevel") || cwd);
+  const repo = contextSafeName(basename(git(cwd, "rev-parse", "--show-toplevel") || cwd));
   const branch = git(cwd, "branch", "--show-current");
   const recentSubjects = git(cwd, "log", "-5", "--format=%s");
   return { repo, query: [repo, branch, recentSubjects].filter(Boolean).join("\n") };

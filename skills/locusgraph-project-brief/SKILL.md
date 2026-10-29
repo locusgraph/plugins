@@ -7,7 +7,7 @@ description: Brief someone on a repository from memory - decisions, constraints,
 
 Uses free tools only.
 
-1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`.
+1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form.
 2. Call `retrieve_memories`:
    - `query`: `<repo> decisions constraints conventions known issues`
    - `coverage_context_ids`: `["project:<repo>"]`
