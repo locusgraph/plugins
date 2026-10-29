@@ -25,6 +25,12 @@ reached through the `locusgraph` MCP server.
   joined by a double underscore, such as `decision:engine__use_d1_batch_only`, and add
   `project:<repo>` to `related_to`. Session-start recall boosts `project:<repo>`, so linked
   memories surface first.
+- Each repository has one anchor memory that owns `project:<repo>`, holding one sentence on
+  what the repository is. Without an owner, the `related_to` links to `project:<repo>` are
+  stored but never bind, so graph expansion cannot walk between that repository's memories.
+  Before the first repository memory in a session, call `store_event` on `project:<repo>`
+  (`event_kind: "fact"`, `source: "assistant"`) without `replace`; an answer that the id
+  already holds a memory means the anchor exists.
 - Build ids only from `a-z`, `0-9`, `_`, `-` and the one `:`. The engine lowercases an id and
   turns any other character into `_` when it stores it, but looks ids up exactly as sent, so an
   id with a dot or a capital is stored under one name and searched for under another. The

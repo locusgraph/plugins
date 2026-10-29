@@ -5,7 +5,7 @@ description: Record an architecture or product decision with its reason and the 
 
 # Decision record
 
-1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form.
+1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form. Then make sure the project anchor exists, once per session: call `store_event` with `context_id: "project:<repo>"`, `event_kind: "fact"`, `source: "assistant"` and `payload: { "data": "Repository <repo>: <what it is, in one sentence from its README>" }`, without `replace`. If the engine answers that the id already holds a memory, the anchor exists; carry on.
 2. Name the decision as a short snake_case slug, such as `use_d1_batch_only`. The id is `decision:<repo>__<slug>`.
 3. Look for earlier decisions on the same subject: call `retrieve_memories` with the decision in plain words, `format: "json"`, `limit: 5`, `context_types: { "decision": [] }`.
    - An earlier decision that this one reverses goes in `contradicts`. Tell the user which one.

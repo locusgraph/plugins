@@ -40,6 +40,13 @@ writes them that way from the start. Session-start recall boosts `project:<repo>
 and `handoff:<repo>`, so a new session starts with that repository's decisions and the last
 handoff.
 
+The skills that write a repository memory first store an anchor, `project:<repo>`, holding one
+sentence on what the repository is. It is written once: a second attempt is refused because
+the id already holds a memory, and the skills read that refusal as "already there". The
+anchor matters because the engine binds a `related_to` edge only to a context some memory
+owns; without it every link to `project:<repo>` stays unresolved, and graph expansion cannot
+walk from one of the repository's memories to the rest.
+
 The sources live in `skills/`; `npm run build` copies them into `claude-code/skills/`.
 
 ## Free by default

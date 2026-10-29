@@ -15,6 +15,7 @@ Uses free tools only.
    - `format`: `json`
 3. Call `retrieve_memories` with `context_ids: ["handoff:<repo>"]`, `format: "json"`, `limit: 1`.
 4. Write the brief, grouped and short:
+   - **Repository**: the `project:<repo>` anchor's one-line description, if there is one.
    - **Where it stands**: the handoff's Goal and Next, if there is one.
    - **Decisions**: one line each, newest first. Mark any with `contradicted_by` as superseded.
    - **Constraints and conventions**: rules that would make a change fail review.

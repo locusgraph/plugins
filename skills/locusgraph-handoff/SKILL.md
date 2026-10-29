@@ -7,7 +7,7 @@ description: Save where the work stopped so the next session, on any machine or 
 
 One handoff per repository, overwritten each time. It costs one write.
 
-1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form.
+1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form. Then make sure the project anchor exists, once per session: call `store_event` with `context_id: "project:<repo>"`, `event_kind: "fact"`, `source: "assistant"` and `payload: { "data": "Repository <repo>: <what it is, in one sentence from its README>" }`, without `replace`. If the engine answers that the id already holds a memory, the anchor exists; carry on.
 2. Write the handoff from this session. Keep it under 120 words:
    - **Goal**: what the user is trying to finish.
    - **Done**: what changed, with file paths or commit hashes.
