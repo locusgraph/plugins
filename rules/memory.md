@@ -39,7 +39,9 @@ reached through the `locusgraph` MCP server.
   answer from. If the user gave none, ask for it once; store without it only if they decline.
 - Set `source: "user"` when the user said it, `"assistant"` when you inferred it.
 - Store at most a few memories per session. Never store secrets, tokens, credentials or
-  anything already recorded in the repository's instruction files or git history.
+  anything already recorded in the repository's instruction files or git history. The one
+  exception is seeding: when the user asks, `locusgraph-seed` copies rules, decisions and
+  fixes from those sources once, each approved by the user and naming its source.
 
 ## Forget
 

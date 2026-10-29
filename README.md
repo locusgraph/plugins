@@ -31,6 +31,7 @@ Claude Code ships these. Every one uses free tools; the only cost is the writes 
 | `locusgraph-decision` | a choice is settled ("let's go with X") | 1, `decision:<repo>__<slug>`, linked to what it reverses |
 | `locusgraph-known-fix` | an error appears, or a non-obvious bug is fixed | 1 after the fix passes, `fix:<repo>__<symptom>` |
 | `locusgraph-project-brief` | "catch me up", "onboard me", "what did we decide" | none |
+| `locusgraph-seed` | "seed memory", or a brief that comes back nearly empty | up to 10, only those approved, each naming its source file or commit |
 | `locusgraph-review` | "clean up memory", conflicting recall | only what the user approves |
 
 Repository memories are named `<type>:<repo>__<slug>` and linked to `project:<repo>`, where

@@ -21,6 +21,6 @@ Uses free tools only.
    - **Constraints and conventions**: rules that would make a change fail review.
    - **Known fixes**: symptom and fix, one line each.
    - **Preferences**: how the user wants work done.
-5. Cite context ids so the user can ask for more on one. Say plainly when memory holds nothing for this repo, and suggest `locusgraph-decision` and `locusgraph-handoff` to start building it.
+5. Cite context ids so the user can ask for more on one. Say plainly when memory holds nothing for this repo. When it holds fewer than five memories, suggest `locusgraph-seed` to import what the repository's docs and git history already record, and `locusgraph-decision` and `locusgraph-handoff` to keep building it.
 
 Do not pad the brief with what the README or CLAUDE.md already says.
