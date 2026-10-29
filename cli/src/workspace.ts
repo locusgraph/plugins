@@ -25,9 +25,16 @@ export function contextSafeName(name: string): string {
     .replace(/[^a-z0-9_-]/g, "_");
 }
 
+const LONG_LIVED_BRANCHES = new Set(["main", "master", "dev", "develop", "trunk"]);
+
+export function sessionQuery(repo: string, branch: string): string {
+  const task = LONG_LIVED_BRANCHES.has(branch) ? "" : branch.replace(/[/_-]+/g, " ");
+  return [repo, "constraints decisions conventions known fixes", task]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function describeWorkspace(cwd: string): Workspace {
   const repo = contextSafeName(basename(git(cwd, "rev-parse", "--show-toplevel") || cwd));
-  const branch = git(cwd, "branch", "--show-current");
-  const recentSubjects = git(cwd, "log", "-5", "--format=%s");
-  return { repo, query: [repo, branch, recentSubjects].filter(Boolean).join("\n") };
+  return { repo, query: sessionQuery(repo, git(cwd, "branch", "--show-current")) };
 }

@@ -9,5 +9,6 @@ If the user has enabled paid tools (LOCUSGRAPH_PAID=1), call `deep_recall` with 
 
 Otherwise walk the graph with free tools:
 1. Call `list_contexts` with `context_type: "decision"`, then `"constraint"`, and pick the ids that relate to the question.
-2. Call `retrieve_memories` with the question, `format: "toon"`, `limit: 8` and those ids in `boost_context_ids`.
-3. Answer in a few sentences. Cite the context ids you used. Say plainly when memory holds no answer.
+2. Call `retrieve_memories` with the question, `format: "json"`, `limit: 8`, `ranking: "similarity"` and those ids in `boost_context_ids`.
+3. Read every result, not only the first. Keep only memories that are about the question; the one that answers can rank last.
+4. Answer in a few sentences. Cite the context ids you used. If no memory is about the question, say memory holds no answer; do not stretch the closest result.
