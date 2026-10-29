@@ -34,6 +34,9 @@ reached through the `locusgraph` MCP server.
   id with a dot or a capital is stored under one name and searched for under another. The
   same goes for `<repo>`: `My.Repo` is `my_repo`.
 - Put one concise sentence in `payload.data`. Search matches on that text.
+- A decision or constraint states its reason in that sentence: "use `batch()` only, because
+  D1 has no interactive transactions". Without the reason, a later "why?" has nothing to
+  answer from. If the user gave none, ask for it once; store without it only if they decline.
 - Set `source: "user"` when the user said it, `"assistant"` when you inferred it.
 - Store at most a few memories per session. Never store secrets, tokens, credentials or
   anything already recorded in the repository's instruction files or git history.
