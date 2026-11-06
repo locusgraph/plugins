@@ -38,8 +38,9 @@ Repository memories are named `<type>:<repo>__<slug>` and linked to `project:<re
 `<repo>` is the directory name of the git root, lowercased, with anything outside `a-z0-9_-`
 turned into `_`. The engine stores ids in that form but looks them up as sent, so the plugin
 writes them that way from the start. Session-start recall boosts `project:<repo>`
-and `handoff:<repo>`, so a new session starts with that repository's decisions and the last
-handoff.
+and reserves room for `handoff:<repo>` with `coverage_context_ids`, so a new session starts
+with that repository's decisions and always gets the last handoff: a boost only adds
+candidates, and a generic query can crowd the handoff out.
 
 The skills that write a repository memory first store an anchor, `project:<repo>`, holding one
 sentence on what the repository is. It is written once: a second attempt is refused because

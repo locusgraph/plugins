@@ -27,7 +27,8 @@ describe("recall", () => {
       query: "engine\ndev",
       limit: 6,
       format: "toon",
-      boost_context_ids: ["project:engine", "handoff:engine"],
+      boost_context_ids: ["project:engine"],
+      coverage_context_ids: ["handoff:engine"],
     });
   });
 
@@ -81,7 +82,7 @@ describe("fetchMemories", () => {
     expect(await fetchMemories(testEnv(), workspace)).toBe("");
   });
 
-  it("posts a toon query that boosts the project and its handoff", async () => {
+  it("posts a toon query that boosts the project and reserves room for its handoff", async () => {
     let received: { path?: string; auth?: string; body?: unknown } = {};
     const server = createServer((request, response) => {
       let body = "";
@@ -116,7 +117,8 @@ describe("fetchMemories", () => {
         query: "engine\ndev",
         limit: 6,
         format: "toon",
-        boost_context_ids: ["project:engine", "handoff:engine"],
+        boost_context_ids: ["project:engine"],
+        coverage_context_ids: ["handoff:engine"],
       },
     });
   });
