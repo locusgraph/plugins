@@ -424,7 +424,8 @@ function recallArguments({ repo, query }) {
     query,
     limit: 6,
     format: "toon",
-    boost_context_ids: [`project:${repo}`, `handoff:${repo}`]
+    boost_context_ids: [`project:${repo}`],
+    coverage_context_ids: [`handoff:${repo}`]
   };
 }
 
