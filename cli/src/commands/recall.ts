@@ -38,12 +38,24 @@ async function recallSection(env: LocusGraphEnv, workspace: Workspace, fetch: Fe
   return memories === "" ? "" : `LocusGraph memories for this workspace:\n${memories}`;
 }
 
+// Names the repository's graph, so the agent can tell the user when its LocusGraph tools were
+// signed in to another one: the tools use the graph chosen at sign-in, not this file.
+export function repoGraphNote(env: LocusGraphEnv): string {
+  if (env.graphSource !== "repo" || env.graphId === undefined) return "";
+  return (
+    `LocusGraph: this repository's graph is \`${env.graphId}\` (from .locusgraph.json). ` +
+    "The LocusGraph tools read and write the graph chosen when they were signed in; if the " +
+    "user expects memories here to go to this graph and the tools use another, say so."
+  );
+}
+
 export async function recall(
   input: HookInput,
   env: LocusGraphEnv,
   { afterCompact, cursor = false, fetch = fetchMemories, workspace }: RecallOptions,
 ): Promise<CommandResult> {
   const sections = [
+    repoGraphNote(env),
     await recallSection(env, workspace ?? describeWorkspace(hookCwd(input)), fetch),
     afterCompact ? STORE_AFTER_COMPACT : "",
   ].filter((section) => section !== "");

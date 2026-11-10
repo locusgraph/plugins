@@ -74,6 +74,26 @@ describe("recall", () => {
     expect(empty.stdout).toBe("{}\n");
   });
 
+  it("names the repository's graph when it comes from .locusgraph.json", async () => {
+    const fromRepo = await recall({}, testEnv({ graphId: "g_work", graphSource: "repo" }), {
+      afterCompact: false,
+      fetch: noFetch,
+      workspace,
+    });
+    const fromDefault = await recall(
+      {},
+      testEnv({ graphId: "g_work", graphSource: "default" }),
+      {
+        afterCompact: false,
+        fetch: noFetch,
+        workspace,
+      },
+    );
+
+    expect(fromRepo.stdout).toMatch(/^LocusGraph: this repository's graph is `g_work`/);
+    expect(fromDefault.stdout).not.toMatch(/this repository's graph/);
+  });
+
   it("asks for a bounded store after compaction", async () => {
     const result = await recall({}, withKey, {
       afterCompact: true,
