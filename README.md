@@ -33,6 +33,8 @@ Claude Code ships these. Every one uses free tools; the only cost is the writes 
 | `locusgraph-project-brief` | "catch me up", "onboard me", "what did we decide" | none |
 | `locusgraph-seed` | "seed memory", or a brief that comes back nearly empty | up to 10, only those approved, each naming its source file or commit |
 | `locusgraph-review` | "clean up memory", conflicting recall | only what the user approves |
+| `locusgraph-skills` | a task with a stored practice (deploy, release, a runbook), or a step of it fails | lessons and rewrites the user approves |
+| `locusgraph-skill-import` | "import this skill", a SKILL.md or runbook to store | one per approved step or rule, plus `skill:<name>` |
 
 Repository memories are named `<type>:<repo>__<slug>` and linked to `project:<repo>`, where
 `<repo>` is the directory name of the git root, lowercased, with anything outside `a-z0-9_-`
@@ -48,6 +50,14 @@ the id already holds a memory, and the skills read that refusal as "already ther
 anchor matters because the engine binds a `related_to` edge only to a context some memory
 owns; without it every link to `project:<repo>` stays unresolved, and graph expansion cannot
 walk from one of the repository's memories to the rest.
+
+A stored skill is `skill:<name>` with its steps (`step:<name>__<nnn>_<slug>`, numbered in tens),
+rules (`rule:<name>__<slug>`) and lessons (`lesson:<name>__<slug>`). Steps and rules `extends`
+the skill. A lesson `extends` the step it adds to, `contradicts` a step that is wrong now, or
+`reinforces` one proven in a new case; the engine raises or lowers that step's confidence to
+match, and recall marks a contradicted step. Folding lessons into a step replaces it and raises
+the skill's version. The other platforms get the same lookup from the Skills section of the
+rules.
 
 The sources live in `skills/`; `npm run build` copies them into `claude-code/skills/`.
 
@@ -176,11 +186,12 @@ cli/src/
   hook-input.ts       the JSON a hook receives on stdin
   paid-tools.ts       which tool calls the guard refuses
   workspace.ts        repo name and recall query from git
-  generated/rules.ts  rules/memory.md as a string, written by the build
+  generated/rules.ts  rules/*.md joined into one string, written by the build
 cli/test/             vitest; bundle.test.ts runs the committed hook bundles
 ```
 
-`rules/memory.md` is the one source for every rules file, and `skills/` for every skill.
+`rules/` is the one source for every rules file: its `.md` files are joined in file-name order,
+so the number prefix sets the order. `skills/` is the one source for every skill.
 `npm run build` regenerates the rules files and the README install buttons, copies the skills
 and licence, and bundles the CLI
 into `claude-code/hooks/lg.mjs`, `cursor/.cursor/hooks/lg.mjs` and `cli/dist/lg.mjs`.
@@ -205,7 +216,10 @@ client. Confirm before announcing support:
 | Codex | remote `url` servers and `codex mcp login` work against the engine's OAuth issuer |
 | Gemini CLI | `excludeTools` applies to MCP tools inside an extension |
 | All | the engine's OAuth issuer accepts each client's redirect URI and registration |
-| Claude Code | `privacyPolicyUrl` in `plugin.json` before submitting to the plugin directory |
+
+## Privacy
+
+What the plugins send and where: see [`PRIVACY.md`](PRIVACY.md).
 
 ## License
 

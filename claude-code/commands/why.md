@@ -5,7 +5,7 @@ argument-hint: <question>
 
 Answer this from LocusGraph memory: $ARGUMENTS
 
-If the user has enabled paid tools (LOCUSGRAPH_PAID=1), call `deep_recall` with the question.
+If a `deep_recall` tool is available and the user has enabled paid tools (LOCUSGRAPH_PAID=1), call it with the question. The plugin connects with `?tools=free`, so it is usually not available.
 
 Otherwise walk the graph with free tools:
 1. Call `list_contexts` with `context_type: "decision"`, then `"constraint"`, and pick the ids that relate to the question.

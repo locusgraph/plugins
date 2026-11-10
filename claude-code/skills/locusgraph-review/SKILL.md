@@ -8,8 +8,8 @@ description: Audit stored memories for a repository - find contradictions, dupli
 Nothing is deleted or replaced without the user's explicit approval for that item.
 
 1. Find `<repo>`: the basename of `git rev-parse --show-toplevel`, lowercased, with every character other than `a-z`, `0-9`, `_` and `-` replaced by `_` (`My.Repo` becomes `my_repo`). The engine stores ids that way, and a lookup must use the stored form.
-2. Call `list_contexts` once per type: `decision`, `constraint`, `preference`, `fix`, `fact`. Keep the ids whose name starts with `<repo>__`, plus `handoff:<repo>`.
-3. Call `retrieve_memories` with `coverage_context_ids: ["project:<repo>"]`, `limit: 30`, `format: "json"`.
+2. Call `list_contexts` once per type: `decision`, `constraint`, `preference`, `fix`, `fact`, `skill`, `step`, `rule`, `lesson`, each with `context_name: "<repo>__"` and `limit: 1000`. Keep the ids whose name starts with `<repo>__`, plus `handoff:<repo>` and `project:<repo>`.
+3. Fetch them all: call `retrieve_memories` with `query: "<repo> memory review"`, `context_ids` set to up to 50 of those ids, `format: "json"` and `limit` equal to that count. Repeat with the next 50 until every id is fetched.
 4. Sort the results into:
    - **Contradicted**: items with `contradicted_by`. The older one is usually stale.
    - **Duplicates**: two items that state the same thing under different ids.

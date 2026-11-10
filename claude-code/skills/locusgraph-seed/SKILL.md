@@ -25,8 +25,8 @@ Uses free tools only. Each memory stored costs one write, and nothing is stored 
    Say how many writes keeping all would cost, and ask which to keep: `all`, `none`, or numbers.
 6. Store only the approved ones. For each, call `store_event`:
    - `context_id`: the id shown
-   - `event_kind`: `decision` for decisions, `fact` for the rest
-   - `source`: `assistant`
+   - `event_kind`: `decision` for decisions, `knowledge` for fixes, `fact` for the rest
+   - `source`: `document`
    - `related_to`: `["project:<repo>"]`
    - `payload`: `{ "data": "<the line shown, without the id or source>", "source": "<file path or commit hash>" }`
    Never send `replace`. If an id already holds a memory, skip it and count it as already stored.

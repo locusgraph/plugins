@@ -13,8 +13,7 @@ interface Output {
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFile(join(root, path), "utf8");
 
-const GENERATED_NOTICE =
-  "<!-- Generated from rules/memory.md by scripts/build.ts. Do not edit. -->\n\n";
+const GENERATED_NOTICE = "<!-- Generated from rules/ by scripts/build.ts. Do not edit. -->\n\n";
 
 function frontmatter(fields: Record<string, string>): string {
   const lines = Object.entries(fields).map(([key, value]) => `${key}: ${value}`);
@@ -78,8 +77,17 @@ async function readmeWithButtons(): Promise<string> {
   return `${readme.slice(0, start + BUTTONS_START.length)}\n${buttons}\n${readme.slice(end)}`;
 }
 
+// Every rules/*.md, in file-name order, joined by a blank line. The number prefix sets the order.
+async function readRules(): Promise<string> {
+  const files = (await readdir(join(root, "rules")))
+    .filter((name) => name.endsWith(".md"))
+    .sort();
+  if (files.length === 0) throw new Error("rules/ holds no .md files");
+  return (await Promise.all(files.map((name) => read(`rules/${name}`)))).join("\n");
+}
+
 async function collectOutputs(): Promise<Record<string, Output>> {
-  const rules = await read("rules/memory.md");
+  const rules = await readRules();
   const license = await read("LICENSE");
   const committed = (content: string): Output => ({ content, committed: true });
 
