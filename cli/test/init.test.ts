@@ -209,6 +209,36 @@ describe("lg init", () => {
     expect(production.lines.join("\n")).not.toContain("LOCUSGRAPH_URL");
   });
 
+  it("allows Claude Code's read-only LocusGraph tools once, keeping the user's settings", async () => {
+    const { home, run } = await workspace();
+    const settings = join(home, ".claude/settings.json");
+    await mkdir(join(home, ".claude"), { recursive: true });
+    await writeFile(
+      settings,
+      JSON.stringify({
+        model: "opus",
+        permissions: { allow: ["Bash(git status)"], deny: ["Read(.env)"] },
+      }),
+    );
+
+    await run(["claude-code"]);
+    const { lines } = await run(["claude-code"]);
+    const config = JSON.parse(await readFile(settings, "utf8"));
+
+    expect(lines[0]).toBe("✔ Claude Code: ~/.claude/settings.json");
+    expect(config).toEqual({
+      model: "opus",
+      permissions: {
+        allow: [
+          "Bash(git status)",
+          "mcp__plugin_locusgraph_locusgraph__retrieve_memories",
+          "mcp__plugin_locusgraph_locusgraph__list_contexts",
+        ],
+        deny: ["Read(.env)"],
+      },
+    });
+  });
+
   it("accepts a local engine URL and shows it in the plan", async () => {
     const { cwd, run } = await workspace();
     await mkdir(join(cwd, ".vscode"));

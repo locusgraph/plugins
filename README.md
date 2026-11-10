@@ -131,14 +131,26 @@ Nothing else to configure: the consent screen is the only setup. At session star
 asks Claude to call `retrieve_memories` once for this repository, and that call goes through
 the MCP server's OAuth token.
 
-A hook cannot reuse that token, so recall costs one tool call. To skip it, give the hook a
-graph-scoped key from the console; it then fetches the memories itself over REST and injects
-them directly. This is optional, and useful in CI where nobody can sign in.
+Three things make Claude use memory without relying on it to decide to:
 
-```
-export LOCUSGRAPH_TOKEN=<key>
-export LOCUSGRAPH_GRAPH_ID=<graph id>
-```
+- **No permission prompts for reads.** `npx @locusgraph/cli init claude-code` adds
+  `retrieve_memories` and `list_contexts` to `permissions.allow` in `~/.claude/settings.json`.
+  `store_event` and `delete_memory` still ask.
+- **Recall the hook does itself.** A hook cannot reuse the MCP token, so by default recall is an
+  instruction Claude may skip. Save a key limited to `memory.read` on your graph, and the
+  session-start hook fetches the memories over REST and puts them in context directly:
+
+  ```
+  <print your key> | npx @locusgraph/cli login --graph <graph id>
+  ```
+
+  The key is read from stdin, checked with one free retrieve, and saved to
+  `~/.config/locusgraph/credentials.json` (mode 600) for that engine only. `lg logout` removes
+  it. `LOCUSGRAPH_TOKEN` and `LOCUSGRAPH_GRAPH_ID` replace it as a pair, for CI.
+- **Skill matching on every prompt.** With a saved key, a `UserPromptSubmit` hook searches stored
+  `skill:` memories by similarity and, when one scores at least 0.6, adds one line naming it so
+  Claude loads it with `locusgraph-skills`. It skips slash commands and prompts under three
+  words, and stays silent on no match or any error.
 
 Commands: `/locusgraph:why`, `/locusgraph:remember`, `/locusgraph:forget`.
 
@@ -174,14 +186,15 @@ directly.
 ```
 cli/src/
   bin.ts              process entry: runs main, writes stdout and stderr, sets the exit code
-  main.ts             command table: recall, guard, init, links
+  main.ts             command table: recall, guard, skill-match, init, links, login, logout
   commands/           one file per command, each returning a CommandResult and doing no I/O to the terminal
   platforms/          one file per agent: detect() and install(); index.ts lists them
   config.ts           engines, MCP URL, paid tool names
   deeplinks.ts        Cursor and VS Code install links, and the README buttons
   engine-flag.ts      --engine, shared by init and links
-  env.ts              LOCUSGRAPH_* variables, read once
-  engine.ts           the one REST call: POST /v1/memories
+  env.ts              LOCUSGRAPH_* variables and saved credentials, read once
+  credentials.ts      the key lg login saves, readable only by its owner
+  engine.ts           the one REST call, POST /v1/memories: recall and skill matching
   files.ts            JSON merge, rules block, TOML table
   hook-input.ts       the JSON a hook receives on stdin
   paid-tools.ts       which tool calls the guard refuses
@@ -216,6 +229,7 @@ client. Confirm before announcing support:
 | Codex | remote `url` servers and `codex mcp login` work against the engine's OAuth issuer |
 | Gemini CLI | `excludeTools` applies to MCP tools inside an extension |
 | All | the engine's OAuth issuer accepts each client's redirect URI and registration |
+| Claude Code | the 0.6 similarity floor for skill matching fits real skills: no hint on unrelated prompts, a hint on "deploy the api" |
 
 ## Privacy
 

@@ -1,4 +1,5 @@
 import { DEFAULT_ENGINE_URL } from "./config.ts";
+import type { Credentials } from "./credentials.ts";
 
 export interface LocusGraphEnv {
   readonly engineUrl: string;
@@ -7,11 +8,19 @@ export interface LocusGraphEnv {
   readonly paidToolsEnabled: boolean;
 }
 
-export function readEnv(env: NodeJS.ProcessEnv): LocusGraphEnv {
+const trimSlash = (url: string) => url.replace(/\/+$/, "");
+
+// LOCUSGRAPH_TOKEN and LOCUSGRAPH_GRAPH_ID, when either is set, replace saved credentials as a
+// pair, so a saved key is never sent with another graph id. Saved credentials apply only to the
+// engine they were made for, so a production key is never sent to dev.
+export function readEnv(env: NodeJS.ProcessEnv, saved?: Credentials): LocusGraphEnv {
+  const engineUrl = trimSlash(env.LOCUSGRAPH_URL || DEFAULT_ENGINE_URL);
+  const fromEnv = Boolean(env.LOCUSGRAPH_TOKEN || env.LOCUSGRAPH_GRAPH_ID);
+  const usable = !fromEnv && saved !== undefined && trimSlash(saved.engineUrl) === engineUrl;
   return {
-    engineUrl: (env.LOCUSGRAPH_URL || DEFAULT_ENGINE_URL).replace(/\/+$/, ""),
-    token: env.LOCUSGRAPH_TOKEN || undefined,
-    graphId: env.LOCUSGRAPH_GRAPH_ID || undefined,
+    engineUrl,
+    token: usable ? saved.key : env.LOCUSGRAPH_TOKEN || undefined,
+    graphId: usable ? saved.graphId : env.LOCUSGRAPH_GRAPH_ID || undefined,
     paidToolsEnabled: env.LOCUSGRAPH_PAID === "1",
   };
 }
