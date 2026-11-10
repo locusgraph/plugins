@@ -146,8 +146,8 @@ Three things make Claude use memory without relying on it to decide to:
   ```
 
   The key is read from stdin, checked with one free retrieve, and saved to
-  `~/.config/locusgraph/credentials.json` (mode 600) for that engine only. `lg logout` removes
-  it. `LOCUSGRAPH_TOKEN` and `LOCUSGRAPH_GRAPH_ID` replace it as a pair, for CI.
+  `~/.config/locusgraph/credentials.json` (mode 600) for that engine only. See
+  [Several graphs](#several-graphs) for more than one key. `lg logout` removes them.
 - **Skill matching on every prompt.** With a saved key, a `UserPromptSubmit` hook searches stored
   `skill:` memories by similarity and, when one scores at least 0.6, adds one line naming it so
   Claude loads it with `locusgraph-skills`. It skips slash commands and prompts under three
@@ -200,6 +200,37 @@ gemini extensions link ./gemini
 
 Copy `vscode/.vscode/mcp.json` and `vscode/.github/copilot-instructions.md` into the project.
 
+## Several graphs
+
+The hooks (session-start recall and skill matching) follow the repository's graph:
+
+1. A repository names its graph in `.locusgraph.json` at its git root, committed so the whole
+   team uses the same one:
+
+   ```
+   { "graph_id": "g_work" }
+   ```
+
+2. Save a key for each graph. The first becomes the default for repositories without the file;
+   `--default` moves it. An account-wide key (`--any`) serves any graph without its own key.
+
+   ```
+   <work key>     | npx @locusgraph/cli login --graph g_work
+   <personal key> | npx @locusgraph/cli login --graph g_personal --default
+   <account key>  | npx @locusgraph/cli login --any
+   npx @locusgraph/cli logout --graph g_work     # one key; plain `logout` removes all
+   ```
+
+The graph is `LOCUSGRAPH_GRAPH_ID`, else `.locusgraph.json`, else the default. The key is
+`LOCUSGRAPH_TOKEN`, else that graph's saved key, else the account-wide key. A saved key is only
+ever sent to the engine it was saved for. A version 1 file (one key) still loads, as that key
+and the default.
+
+The MCP tools are not covered: they use the graph chosen when they were signed in (`/mcp` in
+Claude Code). When the graph comes from `.locusgraph.json`, session start names it, so the agent
+can say when the tools write somewhere else. Per-repository tools need the engine to accept a
+graph per call; see the open items below.
+
 ## Develop
 
 The CLI is TypeScript in `cli/src`, bundled by esbuild into one `lg.mjs` that runs on Node 18
@@ -216,7 +247,8 @@ cli/src/
   deeplinks.ts        Cursor and VS Code install links, and the README buttons
   engine-flag.ts      --engine, shared by init and links
   env.ts              LOCUSGRAPH_* variables and saved credentials, read once
-  credentials.ts      the key lg login saves, readable only by its owner
+  credentials.ts      the keys lg login saves, one per graph, readable only by their owner
+  repo-graph.ts       the graph a repository names in .locusgraph.json
   engine.ts           the one REST call, POST /v1/memories: recall and skill matching
   files.ts            JSON merge, rules block, TOML table
   hook-input.ts       the JSON a hook receives on stdin
@@ -253,6 +285,7 @@ client. Confirm before announcing support:
 | Codex | remote `url` servers and `codex mcp login` work against the engine's OAuth issuer |
 | Gemini CLI | `excludeTools` applies to MCP tools inside an extension |
 | All | the engine's OAuth issuer accepts each client's redirect URI and registration |
+| Engine | an MCP token that reaches several graphs, and a `graph_id` argument on each tool, so the MCP tools can follow `.locusgraph.json` too |
 | Claude Code | the 0.6 similarity floor for skill matching fits real skills: no hint on unrelated prompts, a hint on "deploy the api" |
 
 ## Privacy

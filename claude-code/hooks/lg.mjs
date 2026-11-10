@@ -455,8 +455,8 @@ async function init(args, environment) {
 
 // cli/src/deeplinks.ts
 var SERVER_NAME = "locusgraph";
-function base64(text) {
-  return Buffer.from(text, "utf8").toString("base64");
+function base64(text2) {
+  return Buffer.from(text2, "utf8").toString("base64");
 }
 function cursorInstallLink(mcpUrl) {
   const config = base64(JSON.stringify({ url: mcpUrl }));
@@ -500,32 +500,68 @@ function links(args) {
 // cli/src/credentials.ts
 import { chmod, mkdir as mkdir4, readFile as readFile2, rm, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, join as join7 } from "node:path";
+var NO_KEYS = { keys: [] };
+var trimSlash = (url) => url.replace(/\/+$/, "");
+var text = (value) => typeof value === "string" && value !== "" ? value : void 0;
 function credentialsPath(env, home) {
   const base = env.XDG_CONFIG_HOME || join7(home, ".config");
   return join7(base, "locusgraph", "credentials.json");
 }
-async function readCredentials(path) {
-  try {
-    const value = JSON.parse(await readFile2(path, "utf8"));
-    const { key, graph_id: graphId, engine_url: engineUrl } = value;
-    if (typeof key !== "string" || key === "") return void 0;
-    if (typeof graphId !== "string" || graphId === "") return void 0;
-    if (typeof engineUrl !== "string" || engineUrl === "") return void 0;
-    return { key, graphId, engineUrl };
-  } catch {
-    return void 0;
-  }
+function keyFrom(value) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const entry = value;
+  const key = text(entry.key);
+  const engineUrl = text(entry.engine_url);
+  if (key === void 0 || engineUrl === void 0) return void 0;
+  const graphId = text(entry.graph_id);
+  return {
+    key,
+    engineUrl: trimSlash(engineUrl),
+    ...graphId === void 0 ? {} : { graphId }
+  };
 }
-async function writeCredentials(path, credentials) {
+async function readCredentials(path) {
+  let value;
+  try {
+    value = JSON.parse(await readFile2(path, "utf8"));
+  } catch {
+    return NO_KEYS;
+  }
+  if (!Array.isArray(value.keys)) {
+    const single = keyFrom(value);
+    if (single?.graphId === void 0) return NO_KEYS;
+    return { keys: [single], defaultGraphId: single.graphId };
+  }
+  const keys = value.keys.flatMap((entry) => keyFrom(entry) ?? []);
+  const defaultGraphId = text(value.default_graph_id);
+  return defaultGraphId === void 0 ? { keys } : { keys, defaultGraphId };
+}
+async function writeCredentials(path, saved) {
   await mkdir4(dirname2(path), { recursive: true, mode: 448 });
   const body = {
-    key: credentials.key,
-    graph_id: credentials.graphId,
-    engine_url: credentials.engineUrl
+    version: 2,
+    ...saved.defaultGraphId === void 0 ? {} : { default_graph_id: saved.defaultGraphId },
+    keys: saved.keys.map((entry) => ({
+      key: entry.key,
+      engine_url: entry.engineUrl,
+      ...entry.graphId === void 0 ? {} : { graph_id: entry.graphId }
+    }))
   };
   await writeFile2(path, `${JSON.stringify(body, null, 2)}
 `, { mode: 384 });
   await chmod(path, 384);
+}
+var sameSlot = (a, b) => a.engineUrl === b.engineUrl && a.graphId === b.graphId;
+function withKey(saved, entry, makeDefault) {
+  const keys = [...saved.keys.filter((existing) => !sameSlot(existing, entry)), entry];
+  const defaultGraphId = makeDefault && entry.graphId !== void 0 ? entry.graphId : saved.defaultGraphId ?? entry.graphId;
+  return defaultGraphId === void 0 ? { keys } : { keys, defaultGraphId };
+}
+function withoutKey(saved, engineUrl, graphId) {
+  const target = { key: "", engineUrl: trimSlash(engineUrl), ...graphId ? { graphId } : {} };
+  const keys = saved.keys.filter((existing) => !sameSlot(existing, target));
+  const defaultGraphId = saved.defaultGraphId === graphId ? void 0 : saved.defaultGraphId;
+  return defaultGraphId === void 0 ? { keys } : { keys, defaultGraphId };
 }
 async function removeCredentials(path) {
   try {
@@ -590,96 +626,144 @@ var matchSkill = async (env, prompt) => {
   let best;
   for (const item of result2.data.items) {
     if (typeof item !== "object" || item === null) continue;
-    const { context_ids: ids, text, match_score: score } = item;
-    if (typeof text !== "string" || typeof score !== "number" || !Array.isArray(ids)) continue;
+    const { context_ids: ids, text: text2, match_score: score } = item;
+    if (typeof text2 !== "string" || typeof score !== "number" || !Array.isArray(ids)) continue;
     const contextId = ids.find(
       (id) => typeof id === "string" && id.startsWith("skill:")
     );
     if (contextId === void 0 || score < SKILL_MATCH_MIN_SCORE) continue;
-    if (best === void 0 || score > best.score) best = { contextId, text, score };
+    if (best === void 0 || score > best.score) best = { contextId, text: text2, score };
   }
   return best;
 };
 
 // cli/src/commands/login.ts
 var GRAPH_FLAG = "--graph";
+var ANY_FLAG = "--any";
+var DEFAULT_FLAG = "--default";
 var CHECK_TIMEOUT_MS = 8e3;
-var checkKey = (env) => retrieve(
-  env,
-  { query: "locusgraph login check", limit: 1, format: "json" },
-  CHECK_TIMEOUT_MS
-);
-var usage = "usage: <print your key> | lg login --graph <graph_id> [--engine <production|dev|url>]\nThe key is read from stdin, so it stays out of your shell history. Use a key limited to memory.read on that graph.\n";
-function takeGraphFlag(args) {
-  const rest = [];
+var checkKey = async (entry) => {
+  if (entry.graphId !== void 0) {
+    const result2 = await retrieve(
+      {
+        engineUrl: entry.engineUrl,
+        token: entry.key,
+        graphId: entry.graphId,
+        paidToolsEnabled: false
+      },
+      { query: "locusgraph login check", limit: 1, format: "json" },
+      CHECK_TIMEOUT_MS
+    );
+    return result2.ok ? { ok: true } : { ok: false, status: result2.status };
+  }
+  try {
+    const response = await fetch(`${entry.engineUrl}/v1/graphs`, {
+      headers: { authorization: `Bearer ${entry.key}` },
+      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS)
+    });
+    return response.ok ? { ok: true } : { ok: false, status: response.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+};
+var usage = "usage: <print your key> | lg login (--graph <graph_id> | --any) [--default] [--engine <production|dev|url>]\n  --graph <id>  a key for one graph; the first one saved becomes the default\n  --any         an account-wide key, used for any graph without its own key\n  --default     make --graph <id> the graph used where a repository names none\nThe key is read from stdin, so it stays out of your shell history. Use a key limited to memory.read.\n";
+var logoutUsage = "usage: lg logout [--graph <graph_id> | --any] [--engine <production|dev|url>]\n";
+function parseFlags(args) {
+  const engine = takeEngineFlag(args);
+  if (engine instanceof Error) return engine;
   let graphId;
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index] ?? "";
+  let any = false;
+  let makeDefault = false;
+  const rest = engine.rest;
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index] ?? "";
     if (arg === GRAPH_FLAG || arg.startsWith(`${GRAPH_FLAG}=`)) {
-      const value = arg === GRAPH_FLAG ? args[++index] : arg.slice(GRAPH_FLAG.length + 1);
+      const value = arg === GRAPH_FLAG ? rest[++index] : arg.slice(GRAPH_FLAG.length + 1);
       if (value === void 0 || value === "") return new Error(`${GRAPH_FLAG} needs a value`);
       graphId = value;
+    } else if (arg === ANY_FLAG) {
+      any = true;
+    } else if (arg === DEFAULT_FLAG) {
+      makeDefault = true;
     } else {
-      rest.push(arg);
+      return new Error(`unexpected argument: ${arg}`);
     }
   }
-  return graphId === void 0 ? { rest } : { graphId, rest };
-}
-async function login(args, { key, credentialsPath: credentialsPath2, paidToolsEnabled, check = checkKey }) {
-  const engine = takeEngineFlag(args);
-  if (engine instanceof Error) return { exitCode: 1, stderr: `${engine.message}
-` };
-  const graph = takeGraphFlag(engine.rest);
-  if (graph instanceof Error) return { exitCode: 1, stderr: `${graph.message}
-${usage}` };
-  if (graph.rest.length > 0) {
-    return { exitCode: 1, stderr: `unexpected argument: ${graph.rest[0]}
-${usage}` };
-  }
-  if (graph.graphId === void 0 || key === "") return { exitCode: 1, stderr: usage };
-  const credentials = {
-    key,
-    graphId: graph.graphId,
-    engineUrl: engine.engineUrl
+  if (graphId !== void 0 && any)
+    return new Error(`use ${GRAPH_FLAG} or ${ANY_FLAG}, not both`);
+  if (makeDefault && graphId === void 0)
+    return new Error(`${DEFAULT_FLAG} needs ${GRAPH_FLAG}`);
+  return {
+    engineUrl: engine.engineUrl,
+    ...graphId === void 0 ? {} : { graphId },
+    any,
+    makeDefault
   };
-  const result2 = await check({
-    engineUrl: credentials.engineUrl,
-    token: credentials.key,
-    graphId: credentials.graphId,
-    paidToolsEnabled
-  });
+}
+async function login(args, { key, credentialsPath: credentialsPath2, check = checkKey }) {
+  const flags = parseFlags(args);
+  if (flags instanceof Error) return { exitCode: 1, stderr: `${flags.message}
+${usage}` };
+  if (flags.graphId === void 0 && !flags.any || key === "") {
+    return { exitCode: 1, stderr: usage };
+  }
+  const entry = {
+    key,
+    engineUrl: flags.engineUrl,
+    ...flags.graphId === void 0 ? {} : { graphId: flags.graphId }
+  };
+  const result2 = await check(entry);
   if (!result2.ok) {
-    const reason = result2.status === 0 ? `could not reach ${credentials.engineUrl}` : `the engine answered ${result2.status}`;
+    const reason = result2.status === 0 ? `could not reach ${entry.engineUrl}` : `the engine answered ${result2.status}`;
     return {
       exitCode: 1,
       stderr: `key not saved: ${reason}. Check the key, the graph id and the engine.
 `
     };
   }
-  await writeCredentials(credentialsPath2, credentials);
+  const saved = withKey(await readCredentials(credentialsPath2), entry, flags.makeDefault);
+  await writeCredentials(credentialsPath2, saved);
+  const what = entry.graphId === void 0 ? "account-wide key" : `key for ${entry.graphId}`;
+  const fallback = saved.defaultGraphId === void 0 ? "no default graph yet: repositories without .locusgraph.json are skipped" : `default graph: ${saved.defaultGraphId}`;
   return {
     exitCode: 0,
-    stdout: `saved to ${credentialsPath2} (readable only by you)
-session-start recall and skill matching now fetch memories themselves
+    stdout: `saved ${what} to ${credentialsPath2} (readable only by you)
+${fallback}
 `
   };
 }
-async function logout(credentialsPath2) {
-  const removed = await removeCredentials(credentialsPath2);
-  return {
-    exitCode: 0,
-    stdout: removed ? `removed ${credentialsPath2}
-` : "no saved key\n"
-  };
+async function logout(args, credentialsPath2) {
+  const flags = parseFlags(args);
+  if (flags instanceof Error || flags.makeDefault) {
+    return {
+      exitCode: 1,
+      stderr: `${flags instanceof Error ? `${flags.message}
+` : ""}${logoutUsage}`
+    };
+  }
+  if (flags.graphId === void 0 && !flags.any) {
+    const removed = await removeCredentials(credentialsPath2);
+    return { exitCode: 0, stdout: removed ? `removed ${credentialsPath2}
+` : "no saved key\n" };
+  }
+  const saved = await readCredentials(credentialsPath2);
+  const remaining = withoutKey(saved, flags.engineUrl, flags.graphId);
+  const what = flags.graphId === void 0 ? "account-wide key" : `key for ${flags.graphId}`;
+  if (remaining.keys.length === saved.keys.length)
+    return { exitCode: 0, stdout: `no saved ${what}
+` };
+  await writeCredentials(credentialsPath2, remaining);
+  return { exitCode: 0, stdout: `removed ${what}
+` };
 }
 
 // cli/src/hook-input.ts
 function hookCwd(input) {
   return input.cwd || input.workspace_roots?.[0] || process.cwd();
 }
-function parseHookInput(text) {
+function parseHookInput(text2) {
   try {
-    const value = JSON.parse(text);
+    const value = JSON.parse(text2);
     return typeof value === "object" && value !== null ? value : {};
   } catch {
     return {};
@@ -687,9 +771,9 @@ function parseHookInput(text) {
 }
 async function readStdin(stdin = process.stdin) {
   if (stdin.isTTY) return "";
-  let text = "";
-  for await (const chunk of stdin) text += chunk;
-  return text;
+  let text2 = "";
+  for await (const chunk of stdin) text2 += chunk;
+  return text2;
 }
 async function readHookInput(stdin = process.stdin) {
   return parseHookInput(await readStdin(stdin));
@@ -736,20 +820,25 @@ async function recallSection(env, workspace, fetch2) {
   return memories === "" ? "" : `LocusGraph memories for this workspace:
 ${memories}`;
 }
+function repoGraphNote(env) {
+  if (env.graphSource !== "repo" || env.graphId === void 0) return "";
+  return `LocusGraph: this repository's graph is \`${env.graphId}\` (from .locusgraph.json). The LocusGraph tools read and write the graph chosen when they were signed in; if the user expects memories here to go to this graph and the tools use another, say so.`;
+}
 async function recall(input, env, { afterCompact, cursor: cursor2 = false, fetch: fetch2 = fetchMemories, workspace }) {
   const sections = [
+    repoGraphNote(env),
     await recallSection(env, workspace ?? describeWorkspace(hookCwd(input)), fetch2),
     afterCompact ? STORE_AFTER_COMPACT : ""
   ].filter((section) => section !== "");
-  const text = sections.join("\n\n");
+  const text2 = sections.join("\n\n");
   if (cursor2) {
     return {
       exitCode: 0,
-      stdout: `${JSON.stringify(text === "" ? {} : { additional_context: text })}
+      stdout: `${JSON.stringify(text2 === "" ? {} : { additional_context: text2 })}
 `
     };
   }
-  return text === "" ? { exitCode: 0 } : { exitCode: 0, stdout: `${text}
+  return text2 === "" ? { exitCode: 0 } : { exitCode: 0, stdout: `${text2}
 ` };
 }
 
@@ -770,38 +859,89 @@ async function skillMatch(input, env, match = matchSkill) {
 }
 
 // cli/src/env.ts
-var trimSlash = (url) => url.replace(/\/+$/, "");
-function readEnv(env, saved) {
-  const engineUrl = trimSlash(env.LOCUSGRAPH_URL || DEFAULT_ENGINE_URL);
-  const fromEnv = Boolean(env.LOCUSGRAPH_TOKEN || env.LOCUSGRAPH_GRAPH_ID);
-  const usable = !fromEnv && saved !== void 0 && trimSlash(saved.engineUrl) === engineUrl;
+var trimSlash2 = (url) => url.replace(/\/+$/, "");
+function chooseGraph(env, repoGraphId, saved) {
+  if (env.LOCUSGRAPH_GRAPH_ID) return { graphId: env.LOCUSGRAPH_GRAPH_ID, graphSource: "env" };
+  if (repoGraphId !== void 0) return { graphId: repoGraphId, graphSource: "repo" };
+  if (saved.defaultGraphId !== void 0) {
+    return { graphId: saved.defaultGraphId, graphSource: "default" };
+  }
+  return void 0;
+}
+function readEnv(env, saved = NO_KEYS, repoGraphId) {
+  const engineUrl = trimSlash2(env.LOCUSGRAPH_URL || DEFAULT_ENGINE_URL);
+  const paidToolsEnabled = env.LOCUSGRAPH_PAID === "1";
+  const graph = chooseGraph(env, repoGraphId, saved);
+  const onEngine = saved.keys.filter((entry) => entry.engineUrl === engineUrl);
+  const savedKey = graph === void 0 ? void 0 : onEngine.find((entry) => entry.graphId === graph.graphId) ?? onEngine.find((entry) => entry.graphId === void 0);
   return {
     engineUrl,
-    token: usable ? saved.key : env.LOCUSGRAPH_TOKEN || void 0,
-    graphId: usable ? saved.graphId : env.LOCUSGRAPH_GRAPH_ID || void 0,
-    paidToolsEnabled: env.LOCUSGRAPH_PAID === "1"
+    token: env.LOCUSGRAPH_TOKEN || savedKey?.key,
+    graphId: graph?.graphId,
+    ...graph === void 0 ? {} : { graphSource: graph.graphSource },
+    paidToolsEnabled
   };
 }
 
 // generated-rules:./generated/rules.ts
 var RULES = '# LocusGraph memory\n\nLocusGraph is long-term memory that persists across sessions, projects and tools. It is\nreached through the `locusgraph` MCP server.\n\n## Recall\n\n- Before a non-trivial task, call `retrieve_memories` with the user\'s request in their own\n  words. Use `format: "toon"` and `limit: 5` unless more is needed.\n- For a question that spans linked memories ("why did we choose X?"), walk the graph yourself:\n  `list_contexts` to find the relevant `decision:` or `constraint:` ids, then\n  `retrieve_memories` with those ids in `boost_context_ids`.\n- Memories already injected at session start do not need to be fetched again.\n- Recall returns its best candidates even when none is relevant; it never answers "nothing\n  found". Read every result before answering, not only the first: the one that answers can\n  rank last. Use a memory only if it is about the question asked. If none is, say memory\n  holds nothing on it rather than stretching the closest result.\n- `match_score` mixes in the memory\'s confidence and recency, so a fresh memory scores well\n  on a weak match. When deciding whether memory answers a question at all, pass\n  `ranking: "similarity"`, which scores the match alone.\n\n## Store\n\n- Call `store_event` only for durable knowledge: a decision and its reason, a constraint, a\n  user preference or correction, a non-obvious fix.\n- Use a stable `context_id` in `type:name` form, such as `decision:use_postgres` or\n  `preference:no_code_comments`. One id holds one memory. Update it with `replace: true`.\n  Link a new detail to an existing memory with `extends`.\n- For knowledge about one repository, prefix the name with the repository\'s directory name,\n  joined by a double underscore, such as `decision:engine__use_d1_batch_only`, and add\n  `project:<repo>` to `related_to`. Session-start recall boosts `project:<repo>`, so linked\n  memories surface first.\n- Each repository has one anchor memory that owns `project:<repo>`, holding one sentence on\n  what the repository is. Without an owner, the `related_to` links to `project:<repo>` are\n  stored but never bind, so graph expansion cannot walk between that repository\'s memories.\n  Before the first repository memory in a session, call `store_event` on `project:<repo>`\n  (`event_kind: "fact"`, `source: "assistant"`) without `replace`; an answer that the id\n  already holds a memory means the anchor exists.\n- Build ids only from `a-z`, `0-9`, `_`, `-` and the one `:`. The engine lowercases an id and\n  turns any other character into `_` when it stores it, but looks ids up exactly as sent, so an\n  id with a dot or a capital is stored under one name and searched for under another. The\n  same goes for `<repo>`: `My.Repo` is `my_repo`.\n- Put one concise sentence in `payload.data`. Search matches on that text.\n- A decision or constraint states its reason in that sentence: "use `batch()` only, because\n  D1 has no interactive transactions". Without the reason, a later "why?" has nothing to\n  answer from. If the user gave none, ask for it once; store without it only if they decline.\n- Set `source: "user"` when the user said it, `"assistant"` when you inferred it.\n- Store at most a few memories per session. Never store secrets, tokens, credentials or\n  anything already recorded in the repository\'s instruction files or git history. The one\n  exception is seeding: when the user asks, `locusgraph-seed` copies rules, decisions and\n  fixes from those sources once, each approved by the user and naming its source.\n\n## Forget\n\n- Call `delete_memory` only when the user explicitly asks to forget something. Find the\n  `locus_id` with `retrieve_memories` using `format: "json"`, and confirm with the user first.\n\n## Paid tools\n\n- `observe` and `deep_recall` spend credits. Do not call them unless the user asks for them\n  by name or has enabled paid tools.\n\n## Skills\n\n- A skill is a stored working practice: `skill:<name>` with its steps (`step:<name>__<nnn>_<slug>`),\n  rules (`rule:<name>__<slug>`) and lessons (`lesson:<name>__<slug>`).\n- Before a task the user may have a practice for (deploy, release, review, migrate, a runbook),\n  call `retrieve_memories` with the request in their own words and `context_types: { "skill": [] }`.\n  If a skill fits, load its steps, rules and lessons and follow them, applying each lesson to\n  the step it links to. If none fits, carry on without one.\n- When a step fails and another action fixes it, or the user corrects a step, offer to store\n  a lesson (`event_kind: "feedback"`) that `extends` the step, or `contradicts` it if the step\n  is wrong now. Store it only on the user\'s yes.\n';
 
+// cli/src/repo-graph.ts
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join as join8 } from "node:path";
+var REPO_GRAPH_FILE = ".locusgraph.json";
+var GRAPH_ID = /^[A-Za-z0-9_-]{1,128}$/;
+function gitRoot(cwd) {
+  try {
+    const root = execFileSync2("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    return root === "" ? void 0 : root;
+  } catch {
+    return void 0;
+  }
+}
+function readRepoGraph(cwd) {
+  const root = gitRoot(cwd);
+  if (root === void 0) return void 0;
+  try {
+    const value = JSON.parse(readFileSync(join8(root, REPO_GRAPH_FILE), "utf8"));
+    const graphId = typeof value === "object" && value !== null ? value.graph_id : void 0;
+    return typeof graphId === "string" && GRAPH_ID.test(graphId) ? graphId : void 0;
+  } catch {
+    return void 0;
+  }
+}
+
 // cli/src/main.ts
 var savedPath = () => credentialsPath(process.env, homedir());
-async function hookEnv() {
-  return readEnv(process.env, await readCredentials(savedPath()));
+async function hookEnv(input) {
+  return readEnv(
+    process.env,
+    await readCredentials(savedPath()),
+    readRepoGraph(hookCwd(input))
+  );
 }
 var COMMANDS = {
-  recall: async (args) => recall(await readHookInput(), await hookEnv(), {
-    afterCompact: args.includes("--after-compact"),
-    cursor: args.includes("--cursor")
-  }),
+  recall: async (args) => {
+    const input = await readHookInput();
+    return recall(input, await hookEnv(input), {
+      afterCompact: args.includes("--after-compact"),
+      cursor: args.includes("--cursor")
+    });
+  },
   guard: async (args) => guard(
     await readHookInput(),
     readEnv(process.env),
     args.includes("--cursor") ? "cursor" : "claude"
   ),
-  "skill-match": async () => skillMatch(await readHookInput(), await hookEnv()),
+  "skill-match": async () => {
+    const input = await readHookInput();
+    return skillMatch(input, await hookEnv(input));
+  },
   init: (args) => init(args, {
     cwd: process.cwd(),
     home: homedir(),
@@ -810,12 +950,8 @@ var COMMANDS = {
     ...process.env.CLAUDE_CONFIG_DIR ? { claudeConfigDir: process.env.CLAUDE_CONFIG_DIR } : {}
   }),
   links: async (args) => links(args),
-  login: async (args) => login(args, {
-    key: (await readStdin()).trim(),
-    credentialsPath: savedPath(),
-    paidToolsEnabled: readEnv(process.env).paidToolsEnabled
-  }),
-  logout: async () => logout(savedPath())
+  login: async (args) => login(args, { key: (await readStdin()).trim(), credentialsPath: savedPath() }),
+  logout: async (args) => logout(args, savedPath())
 };
 async function main(argv) {
   const [name = "", ...args] = argv;
