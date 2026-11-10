@@ -38,6 +38,9 @@ const COMMANDS: Record<string, Command> = {
       home: homedir(),
       rules: RULES,
       hookScript: fileURLToPath(import.meta.url),
+      ...(process.env.CLAUDE_CONFIG_DIR
+        ? { claudeConfigDir: process.env.CLAUDE_CONFIG_DIR }
+        : {}),
     }),
   links: async (args) => links(args),
   login: async (args) =>

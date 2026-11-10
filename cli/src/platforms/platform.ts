@@ -3,6 +3,8 @@ export interface InitEnvironment {
   readonly home: string;
   readonly rules: string;
   readonly hookScript: string;
+  // CLAUDE_CONFIG_DIR when set: Claude Code reads its settings from there instead of ~/.claude.
+  readonly claudeConfigDir?: string;
 }
 
 export interface InstallContext extends InitEnvironment {

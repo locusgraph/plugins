@@ -134,7 +134,8 @@ the MCP server's OAuth token.
 Three things make Claude use memory without relying on it to decide to:
 
 - **No permission prompts for reads.** `npx @locusgraph/cli init claude-code` adds
-  `retrieve_memories` and `list_contexts` to `permissions.allow` in `~/.claude/settings.json`.
+  `retrieve_memories` and `list_contexts` to `permissions.allow` in `~/.claude/settings.json`,
+  or in `$CLAUDE_CONFIG_DIR/settings.json` when that is set.
   `store_event` and `delete_memory` still ask.
 - **Recall the hook does itself.** A hook cannot reuse the MCP token, so by default recall is an
   instruction Claude may skip. Save a key limited to `memory.read` on your graph, and the
