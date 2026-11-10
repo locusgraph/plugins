@@ -1,6 +1,6 @@
 {
   "name": "@locusgraph/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Install LocusGraph memory into Claude Code, Cursor, Codex, OpenCode, Gemini CLI and VS Code",
   "license": "MIT",
   "type": "module",
