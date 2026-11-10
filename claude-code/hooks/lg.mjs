@@ -133,15 +133,15 @@ var CLAUDE_CODE_READ_TOOLS = [
   "mcp__plugin_locusgraph_locusgraph__retrieve_memories",
   "mcp__plugin_locusgraph_locusgraph__list_contexts"
 ];
-var SETTINGS = ".claude/settings.json";
+var configDir = ({ home, claudeConfigDir }) => claudeConfigDir ?? join(home, ".claude");
 var claudeCode = {
   id: "claude-code",
   label: "Claude Code",
-  writesGlobal: `~/${SETTINGS}`,
+  writesGlobal: "~/.claude/settings.json ($CLAUDE_CONFIG_DIR if set)",
   nextStep: ({ engineUrl }) => (engineUrl === DEFAULT_ENGINE_URL ? "" : `export LOCUSGRAPH_URL=${engineUrl}, then `) + "in Claude Code: /plugin marketplace add locusgraph/plugins, then /plugin install locusgraph@locusgraph",
-  detect: ({ home }) => existsSync(join(home, ".claude")),
-  install: async ({ home }) => {
-    const settings = join(home, SETTINGS);
+  detect: (context) => existsSync(configDir(context)),
+  install: async (context) => {
+    const settings = join(configDir(context), "settings.json");
     await mergeJson(settings, (config) => {
       const permissions = asObject(config.permissions);
       const allow = Array.isArray(permissions.allow) ? permissions.allow : [];
@@ -730,7 +730,8 @@ var COMMANDS = {
     cwd: process.cwd(),
     home: homedir(),
     rules: RULES,
-    hookScript: fileURLToPath(import.meta.url)
+    hookScript: fileURLToPath(import.meta.url),
+    ...process.env.CLAUDE_CONFIG_DIR ? { claudeConfigDir: process.env.CLAUDE_CONFIG_DIR } : {}
   }),
   links: async (args) => links(args),
   login: async (args) => login(args, {

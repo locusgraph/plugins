@@ -239,6 +239,26 @@ describe("lg init", () => {
     });
   });
 
+  it("writes Claude Code's permissions under CLAUDE_CONFIG_DIR when it is set", async () => {
+    const { cwd, home } = await workspace();
+    const configDir = join(home, "profiles/test");
+
+    const result = await init(["claude-code"], {
+      cwd,
+      home,
+      rules: "# Rules\n",
+      hookScript: join(home, "lg.mjs"),
+      claudeConfigDir: configDir,
+    });
+    const config = JSON.parse(await readFile(join(configDir, "settings.json"), "utf8"));
+
+    expect(result.exitCode).toBe(0);
+    expect(config.permissions.allow).toContain(
+      "mcp__plugin_locusgraph_locusgraph__retrieve_memories",
+    );
+    await expect(readFile(join(home, ".claude/settings.json"), "utf8")).rejects.toThrow();
+  });
+
   it("accepts a local engine URL and shows it in the plan", async () => {
     const { cwd, run } = await workspace();
     await mkdir(join(cwd, ".vscode"));
