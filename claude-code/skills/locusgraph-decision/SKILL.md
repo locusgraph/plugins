@@ -15,7 +15,9 @@ description: Record an architecture or product decision with its reason and the 
    - `context_id`: `decision:<repo>__<slug>`
    - `event_kind`: `decision`
    - `source`: `user` when the user made the call, `assistant` when you proposed it and the user agreed
-   - `related_to`: `["project:<repo>"]`, plus any `contradicts` or `extends` from step 3
+   - `related_to`: `["project:<repo>"]`
+   - `contradicts`: the ids this decision reverses, from step 3, if any
+   - `extends`: the ids this decision builds on, from step 3, if any
    - `payload`: `{ "data": "<decision and reason in one sentence>", "rejected": ["<option>: <why not>"], "revisit_if": "<condition that would reopen it>" }`
 5. Reply with the id and the one-sentence decision.
 

@@ -14,6 +14,7 @@ Uses free tools only.
    - `limit`: `15`
    - `format`: `json`
 3. Call `retrieve_memories` with `context_ids: ["handoff:<repo>"]`, `format: "json"`, `limit: 1`.
+   Then call `retrieve_memories` with `query: "<repo> skills"`, `context_types: { "skill": [] }`, `boost_context_ids: ["project:<repo>"]`, `format: "json"`, `limit: 10`.
 4. Write the brief, grouped and short:
    - **Repository**: the `project:<repo>` anchor's one-line description, if there is one.
    - **Where it stands**: the handoff's Goal and Next, if there is one.
@@ -21,6 +22,7 @@ Uses free tools only.
    - **Constraints and conventions**: rules that would make a change fail review.
    - **Known fixes**: symptom and fix, one line each.
    - **Preferences**: how the user wants work done.
+   - **Skills**: stored practices for this repository (`skill:<repo>__…`) or in general, one line each with their version. Leave out a skill whose trigger has nothing to do with this repository.
 5. Cite context ids so the user can ask for more on one. Say plainly when memory holds nothing for this repo. When it holds fewer than five memories, suggest `locusgraph-seed` to import what the repository's docs and git history already record, and `locusgraph-decision` and `locusgraph-handoff` to keep building it.
 
 Do not pad the brief with what the README or CLAUDE.md already says.

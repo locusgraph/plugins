@@ -35,8 +35,8 @@ Uses free tools only. Reading a skill costs nothing; each memory stored or repla
 
 ## 2. Load
 
-1. Call `list_contexts` with `context_type: "step"`, then with `context_type: "rule"`, then with `context_type: "lesson"`. Keep only the names that start with `<skill>__`.
-2. Call `retrieve_memories` with `query: "<skill> steps rules lessons"`, `context_ids` set to every id kept, `format: "json"` and `limit` equal to that count.
+1. Call `list_contexts` with `context_type: "step"`, then `"rule"`, then `"lesson"`, each with `context_name: "<skill>__"` and `limit: 1000`. The name filter matches names that contain the text, so keep only the names that start with `<skill>__`.
+2. Call `retrieve_memories` with `query: "<skill> steps rules lessons"`, `context_ids` set to up to 50 of the ids kept, `format: "json"` and `limit` equal to that count. Repeat with the next 50 until every id is fetched; the engine returns at most 100 per call.
 3. Order steps by `<nnn>`. Put each lesson under the step or rule it links to. Mark any memory with `contradicted_by`.
 
 ## 3. Use

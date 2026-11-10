@@ -31,7 +31,7 @@ Uses free tools only. Each memory stored costs one write, and nothing is stored 
 
 ## 8. Re-import a skill that is stored
 
-1. Load it the way `locusgraph-skills` does: `list_contexts` for `step`, `rule` and `lesson`, keep names starting with `<skill>__`, then `retrieve_memories` with those `context_ids` and `format: "json"`.
+1. Load it the way `locusgraph-skills` does: `list_contexts` for `step`, `rule` and `lesson`, each with `context_name: "<skill>__"` and `limit: 1000`; keep the names that start with `<skill>__`; then `retrieve_memories` with those `context_ids` in batches of 50, `format: "json"` and `limit` equal to the batch size.
 2. Compare the file with what is stored and list only the differences, numbered: new steps and rules, changed ones (old text, then new text), and ones the file no longer has. Lessons stay as they are and are never listed for deletion here.
 3. Ask which to apply. For an approved change, call `store_event` with the same `context_id`, `replace: true`, `source: "document"` and the new text. For an approved removal, call `delete_memory` with its `locus_id`. If anything changed, replace `skill:<skill>` with the version raised by one.
 
