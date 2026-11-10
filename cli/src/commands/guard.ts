@@ -18,7 +18,7 @@ export function guard(
   if (dialect === "cursor") {
     const answer = verdict.allowed
       ? { permission: "allow" }
-      : { permission: "deny", userMessage: verdict.reason, agentMessage: verdict.reason };
+      : { permission: "deny", user_message: verdict.reason, agent_message: verdict.reason };
     return { exitCode: 0, stdout: JSON.stringify(answer) };
   }
 

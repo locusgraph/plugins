@@ -1,6 +1,7 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [{ "command": "node .cursor/hooks/lg.mjs recall --cursor" }],
     "beforeMCPExecution": [{ "command": "node .cursor/hooks/lg.mjs guard --cursor" }]
   }
 }

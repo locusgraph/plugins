@@ -11,8 +11,8 @@ the platform has them. There is no per-platform server code.
 | Platform | Folder | MCP | Rules | Auto-recall | Paid-tool guard |
 |---|---|---|---|---|---|
 | Claude Code | `claude-code/` | `.mcp.json` | skill | `SessionStart` hook | `PreToolUse` hook |
-| Cursor | `cursor/` | `.cursor/mcp.json` | `.cursor/rules/locusgraph.mdc` | no | `beforeMCPExecution` hook |
-| Codex | `codex/` | `config.toml` | `AGENTS.md` | no | rules only |
+| Cursor | `cursor/` | `.cursor/mcp.json` | `.cursor/rules/locusgraph.mdc` | `sessionStart` hook | `beforeMCPExecution` hook |
+| Codex | `codex/` | `config.toml` | `AGENTS.md` | `SessionStart` hook | `PreToolUse` hook |
 | OpenCode | `opencode/` | `opencode.json` | `AGENTS.md` | no | rules only |
 | Gemini CLI | `gemini/` | `gemini-extension.json` | `GEMINI.md` | no | `excludeTools` |
 | VS Code Copilot | `vscode/` | `.vscode/mcp.json` | `.github/copilot-instructions.md` | no | rules only |
@@ -157,12 +157,34 @@ Commands: `/locusgraph:why`, `/locusgraph:remember`, `/locusgraph:forget`.
 
 ### Cursor
 
-Copy `cursor/.cursor/` into the project root. The hook runs `node .cursor/hooks/lg.mjs`.
+Copy `cursor/.cursor/` into the project root, or run `npx @locusgraph/cli init cursor`. The hooks
+run `node .cursor/hooks/lg.mjs` from the project root:
+
+- `sessionStart` returns the recall as `additional_context`. With a key saved by `lg login`, that
+  is the memories themselves; without one, an instruction to call `retrieve_memories` once.
+- `beforeMCPExecution` blocks the paid tools, answering with `user_message` and `agent_message`.
+- `.cursor/cli.json` allows `retrieve_memories` and `list_contexts` without a prompt in
+  `cursor-agent`. The IDE has no file setting for this: allow them under Settings > Agents.
+
+Cursor has no per-prompt hook that can add context (`beforeSubmitPrompt` can only allow or
+block), so skill matching on every prompt is Claude Code and Codex only. In Cursor, the Skills
+section of the rules does the lookup.
 
 ### Codex
 
-Append `codex/config.toml` to `~/.codex/config.toml`, then run `codex mcp login locusgraph`.
-Copy `codex/AGENTS.md` into the project, or merge it into an existing one.
+Run `npx @locusgraph/cli init codex`, then `codex mcp login locusgraph`, then `/hooks` in Codex to
+trust the LocusGraph hooks: Codex runs no hook a user has not reviewed. Init writes:
+
+- `~/.codex/config.toml`: the server, and `approval_mode = "approve"` for `retrieve_memories` and
+  `list_contexts`. Writes keep Codex's default, which asks for a tool that is not read-only.
+- `~/.codex/locusgraph/lg.mjs` and `~/.codex/hooks.json`: `SessionStart` recall (plain stdout
+  becomes context), `UserPromptSubmit` skill matching, and a `PreToolUse` guard on
+  `mcp__locusgraph__(observe|deep_recall)`. Recall and skill matching use the key `lg login`
+  saves, as in Claude Code.
+- `AGENTS.md` in the project: the rules block.
+
+By hand: append `codex/config.toml` to `~/.codex/config.toml` and copy `codex/AGENTS.md`; the
+hooks need the CLI, because their command holds the script's absolute path.
 
 ### OpenCode
 
@@ -226,7 +248,8 @@ client. Confirm before announcing support:
 
 | Platform | Check |
 |---|---|
-| Cursor | `beforeMCPExecution` input carries `tool_name`, and a `deny` answer blocks the call |
+| Cursor | `beforeMCPExecution` input carries `tool_name` and a `deny` answer blocks the call; `sessionStart` `additional_context` reaches the agent |
+| Codex | the hooks run after `/hooks` trust, and `approval_mode = "approve"` skips the prompt for the two read tools |
 | Codex | remote `url` servers and `codex mcp login` work against the engine's OAuth issuer |
 | Gemini CLI | `excludeTools` applies to MCP tools inside an extension |
 | All | the engine's OAuth issuer accepts each client's redirect URI and registration |

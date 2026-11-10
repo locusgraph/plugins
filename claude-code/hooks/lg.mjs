@@ -43,7 +43,7 @@ function guard(input, env, dialect) {
     env.paidToolsEnabled
   );
   if (dialect === "cursor") {
-    const answer = verdict.allowed ? { permission: "allow" } : { permission: "deny", userMessage: verdict.reason, agentMessage: verdict.reason };
+    const answer = verdict.allowed ? { permission: "allow" } : { permission: "deny", user_message: verdict.reason, agent_message: verdict.reason };
     return { exitCode: 0, stdout: JSON.stringify(answer) };
   }
   return verdict.allowed ? { exitCode: 0 } : { exitCode: 2, stderr: `${verdict.reason}
@@ -154,29 +154,87 @@ var claudeCode = {
 
 // cli/src/platforms/codex.ts
 import { existsSync as existsSync2 } from "node:fs";
+import { copyFile, mkdir as mkdir2 } from "node:fs/promises";
 import { join as join2 } from "node:path";
+var CODEX_READ_TOOLS = ["retrieve_memories", "list_contexts"];
+var HOOKS = [
+  { event: "SessionStart", matcher: "startup|resume|clear", args: "recall", timeout: 10 },
+  { event: "SessionStart", matcher: "compact", args: "recall --after-compact", timeout: 10 },
+  { event: "UserPromptSubmit", args: "skill-match", timeout: 5 },
+  {
+    event: "PreToolUse",
+    matcher: "mcp__locusgraph__(observe|deep_recall)",
+    args: "guard",
+    timeout: 5
+  }
+];
+function withCodexHooks(script) {
+  return (config) => {
+    const hooks = { ...asObject(config.hooks) };
+    for (const { event, matcher, args, timeout } of HOOKS) {
+      const command = `node "${script}" ${args}`;
+      const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
+      const present = groups.some((group) => {
+        const entries = asObject(group).hooks;
+        return Array.isArray(entries) && entries.some((hook) => asObject(hook).command === command);
+      });
+      if (present) continue;
+      hooks[event] = [
+        ...groups,
+        {
+          ...matcher === void 0 ? {} : { matcher },
+          hooks: [{ type: "command", command, timeout }]
+        }
+      ];
+    }
+    return { ...config, hooks };
+  };
+}
 var codex = {
   id: "codex",
   label: "Codex",
-  writesGlobal: "~/.codex/config.toml",
-  nextStep: () => "codex mcp login locusgraph",
+  writesGlobal: "~/.codex/config.toml and ~/.codex/hooks.json",
+  nextStep: () => "codex mcp login locusgraph, then run /hooks in Codex and trust the LocusGraph hooks",
   detect: ({ home }) => existsSync2(join2(home, ".codex")),
-  async install({ cwd, home, rules, mcpUrl }) {
+  async install({ cwd, home, rules, mcpUrl, hookScript }) {
     const config = join2(home, ".codex/config.toml");
     await upsertTomlTable(config, "mcp_servers.locusgraph", `url = "${mcpUrl}"`);
+    for (const tool of CODEX_READ_TOOLS) {
+      await upsertTomlTable(
+        config,
+        `mcp_servers.locusgraph.tools.${tool}`,
+        'approval_mode = "approve"'
+      );
+    }
+    const script = join2(home, ".codex/locusgraph/lg.mjs");
+    await mkdir2(join2(home, ".codex/locusgraph"), { recursive: true });
+    await copyFile(hookScript, script);
+    const hooks = join2(home, ".codex/hooks.json");
+    await mergeJson(hooks, withCodexHooks(script));
     await upsertRulesBlock(join2(cwd, "AGENTS.md"), rules);
-    return [config, "AGENTS.md"];
+    return [config, hooks, script, "AGENTS.md"];
   }
 };
 
 // cli/src/platforms/cursor.ts
 import { existsSync as existsSync3 } from "node:fs";
-import { copyFile, mkdir as mkdir2 } from "node:fs/promises";
+import { copyFile as copyFile2, mkdir as mkdir3 } from "node:fs/promises";
 import { join as join3 } from "node:path";
 var GUARD_COMMAND = "node .cursor/hooks/lg.mjs guard --cursor";
+var RECALL_COMMAND = "node .cursor/hooks/lg.mjs recall --cursor";
+var CURSOR_CLI_READ_TOOLS = [
+  "Mcp(locusgraph:retrieve_memories)",
+  "Mcp(locusgraph:list_contexts)"
+];
+function withHook(hooks, event, command) {
+  const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
+  const present = existing.some((hook) => asObject(hook).command === command);
+  return present ? existing : [...existing, { command }];
+}
 var cursor = {
   id: "cursor",
   label: "Cursor",
+  nextStep: () => "in the Cursor IDE, allow retrieve_memories and list_contexts under Settings > Agents so recall never waits for approval",
   detect: ({ cwd }) => existsSync3(join3(cwd, ".cursor")),
   async install({ cwd, rules, hookScript, mcpUrl }) {
     await mergeJson(
@@ -192,26 +250,32 @@ alwaysApply: true
 
 ${rules}`
     );
-    await mkdir2(join3(cwd, ".cursor/hooks"), { recursive: true });
-    await copyFile(hookScript, join3(cwd, ".cursor/hooks/lg.mjs"));
+    await mkdir3(join3(cwd, ".cursor/hooks"), { recursive: true });
+    await copyFile2(hookScript, join3(cwd, ".cursor/hooks/lg.mjs"));
     await mergeJson(join3(cwd, ".cursor/hooks.json"), (config) => {
       const hooks = asObject(config.hooks);
-      const existing = Array.isArray(hooks.beforeMCPExecution) ? hooks.beforeMCPExecution : [];
-      const guarded = existing.some((hook) => asObject(hook).command === GUARD_COMMAND);
       return {
         version: 1,
         ...config,
         hooks: {
           ...hooks,
-          beforeMCPExecution: guarded ? existing : [...existing, { command: GUARD_COMMAND }]
+          sessionStart: withHook(hooks, "sessionStart", RECALL_COMMAND),
+          beforeMCPExecution: withHook(hooks, "beforeMCPExecution", GUARD_COMMAND)
         }
       };
+    });
+    await mergeJson(join3(cwd, ".cursor/cli.json"), (config) => {
+      const permissions = asObject(config.permissions);
+      const allow = Array.isArray(permissions.allow) ? permissions.allow : [];
+      const missing = CURSOR_CLI_READ_TOOLS.filter((tool) => !allow.includes(tool));
+      return { ...config, permissions: { ...permissions, allow: [...allow, ...missing] } };
     });
     return [
       ".cursor/mcp.json",
       ".cursor/rules/locusgraph.mdc",
       ".cursor/hooks.json",
-      ".cursor/hooks/lg.mjs"
+      ".cursor/hooks/lg.mjs",
+      ".cursor/cli.json"
     ];
   }
 };
@@ -434,7 +498,7 @@ function links(args) {
 }
 
 // cli/src/credentials.ts
-import { chmod, mkdir as mkdir3, readFile as readFile2, rm, writeFile as writeFile2 } from "node:fs/promises";
+import { chmod, mkdir as mkdir4, readFile as readFile2, rm, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, join as join7 } from "node:path";
 function credentialsPath(env, home) {
   const base = env.XDG_CONFIG_HOME || join7(home, ".config");
@@ -453,7 +517,7 @@ async function readCredentials(path) {
   }
 }
 async function writeCredentials(path, credentials) {
-  await mkdir3(dirname2(path), { recursive: true, mode: 448 });
+  await mkdir4(dirname2(path), { recursive: true, mode: 448 });
   const body = {
     key: credentials.key,
     graph_id: credentials.graphId,
@@ -609,6 +673,28 @@ async function logout(credentialsPath2) {
   };
 }
 
+// cli/src/hook-input.ts
+function hookCwd(input) {
+  return input.cwd || input.workspace_roots?.[0] || process.cwd();
+}
+function parseHookInput(text) {
+  try {
+    const value = JSON.parse(text);
+    return typeof value === "object" && value !== null ? value : {};
+  } catch {
+    return {};
+  }
+}
+async function readStdin(stdin = process.stdin) {
+  if (stdin.isTTY) return "";
+  let text = "";
+  for await (const chunk of stdin) text += chunk;
+  return text;
+}
+async function readHookInput(stdin = process.stdin) {
+  return parseHookInput(await readStdin(stdin));
+}
+
 // cli/src/workspace.ts
 import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
@@ -650,12 +736,20 @@ async function recallSection(env, workspace, fetch2) {
   return memories === "" ? "" : `LocusGraph memories for this workspace:
 ${memories}`;
 }
-async function recall(input, env, { afterCompact, fetch: fetch2 = fetchMemories, workspace }) {
+async function recall(input, env, { afterCompact, cursor: cursor2 = false, fetch: fetch2 = fetchMemories, workspace }) {
   const sections = [
-    await recallSection(env, workspace ?? describeWorkspace(input.cwd || process.cwd()), fetch2),
+    await recallSection(env, workspace ?? describeWorkspace(hookCwd(input)), fetch2),
     afterCompact ? STORE_AFTER_COMPACT : ""
   ].filter((section) => section !== "");
-  return sections.length === 0 ? { exitCode: 0 } : { exitCode: 0, stdout: `${sections.join("\n\n")}
+  const text = sections.join("\n\n");
+  if (cursor2) {
+    return {
+      exitCode: 0,
+      stdout: `${JSON.stringify(text === "" ? {} : { additional_context: text })}
+`
+    };
+  }
+  return text === "" ? { exitCode: 0 } : { exitCode: 0, stdout: `${text}
 ` };
 }
 
@@ -692,25 +786,6 @@ function readEnv(env, saved) {
 // generated-rules:./generated/rules.ts
 var RULES = '# LocusGraph memory\n\nLocusGraph is long-term memory that persists across sessions, projects and tools. It is\nreached through the `locusgraph` MCP server.\n\n## Recall\n\n- Before a non-trivial task, call `retrieve_memories` with the user\'s request in their own\n  words. Use `format: "toon"` and `limit: 5` unless more is needed.\n- For a question that spans linked memories ("why did we choose X?"), walk the graph yourself:\n  `list_contexts` to find the relevant `decision:` or `constraint:` ids, then\n  `retrieve_memories` with those ids in `boost_context_ids`.\n- Memories already injected at session start do not need to be fetched again.\n- Recall returns its best candidates even when none is relevant; it never answers "nothing\n  found". Read every result before answering, not only the first: the one that answers can\n  rank last. Use a memory only if it is about the question asked. If none is, say memory\n  holds nothing on it rather than stretching the closest result.\n- `match_score` mixes in the memory\'s confidence and recency, so a fresh memory scores well\n  on a weak match. When deciding whether memory answers a question at all, pass\n  `ranking: "similarity"`, which scores the match alone.\n\n## Store\n\n- Call `store_event` only for durable knowledge: a decision and its reason, a constraint, a\n  user preference or correction, a non-obvious fix.\n- Use a stable `context_id` in `type:name` form, such as `decision:use_postgres` or\n  `preference:no_code_comments`. One id holds one memory. Update it with `replace: true`.\n  Link a new detail to an existing memory with `extends`.\n- For knowledge about one repository, prefix the name with the repository\'s directory name,\n  joined by a double underscore, such as `decision:engine__use_d1_batch_only`, and add\n  `project:<repo>` to `related_to`. Session-start recall boosts `project:<repo>`, so linked\n  memories surface first.\n- Each repository has one anchor memory that owns `project:<repo>`, holding one sentence on\n  what the repository is. Without an owner, the `related_to` links to `project:<repo>` are\n  stored but never bind, so graph expansion cannot walk between that repository\'s memories.\n  Before the first repository memory in a session, call `store_event` on `project:<repo>`\n  (`event_kind: "fact"`, `source: "assistant"`) without `replace`; an answer that the id\n  already holds a memory means the anchor exists.\n- Build ids only from `a-z`, `0-9`, `_`, `-` and the one `:`. The engine lowercases an id and\n  turns any other character into `_` when it stores it, but looks ids up exactly as sent, so an\n  id with a dot or a capital is stored under one name and searched for under another. The\n  same goes for `<repo>`: `My.Repo` is `my_repo`.\n- Put one concise sentence in `payload.data`. Search matches on that text.\n- A decision or constraint states its reason in that sentence: "use `batch()` only, because\n  D1 has no interactive transactions". Without the reason, a later "why?" has nothing to\n  answer from. If the user gave none, ask for it once; store without it only if they decline.\n- Set `source: "user"` when the user said it, `"assistant"` when you inferred it.\n- Store at most a few memories per session. Never store secrets, tokens, credentials or\n  anything already recorded in the repository\'s instruction files or git history. The one\n  exception is seeding: when the user asks, `locusgraph-seed` copies rules, decisions and\n  fixes from those sources once, each approved by the user and naming its source.\n\n## Forget\n\n- Call `delete_memory` only when the user explicitly asks to forget something. Find the\n  `locus_id` with `retrieve_memories` using `format: "json"`, and confirm with the user first.\n\n## Paid tools\n\n- `observe` and `deep_recall` spend credits. Do not call them unless the user asks for them\n  by name or has enabled paid tools.\n\n## Skills\n\n- A skill is a stored working practice: `skill:<name>` with its steps (`step:<name>__<nnn>_<slug>`),\n  rules (`rule:<name>__<slug>`) and lessons (`lesson:<name>__<slug>`).\n- Before a task the user may have a practice for (deploy, release, review, migrate, a runbook),\n  call `retrieve_memories` with the request in their own words and `context_types: { "skill": [] }`.\n  If a skill fits, load its steps, rules and lessons and follow them, applying each lesson to\n  the step it links to. If none fits, carry on without one.\n- When a step fails and another action fixes it, or the user corrects a step, offer to store\n  a lesson (`event_kind: "feedback"`) that `extends` the step, or `contradicts` it if the step\n  is wrong now. Store it only on the user\'s yes.\n';
 
-// cli/src/hook-input.ts
-function parseHookInput(text) {
-  try {
-    const value = JSON.parse(text);
-    return typeof value === "object" && value !== null ? value : {};
-  } catch {
-    return {};
-  }
-}
-async function readStdin(stdin = process.stdin) {
-  if (stdin.isTTY) return "";
-  let text = "";
-  for await (const chunk of stdin) text += chunk;
-  return text;
-}
-async function readHookInput(stdin = process.stdin) {
-  return parseHookInput(await readStdin(stdin));
-}
-
 // cli/src/main.ts
 var savedPath = () => credentialsPath(process.env, homedir());
 async function hookEnv() {
@@ -718,7 +793,8 @@ async function hookEnv() {
 }
 var COMMANDS = {
   recall: async (args) => recall(await readHookInput(), await hookEnv(), {
-    afterCompact: args.includes("--after-compact")
+    afterCompact: args.includes("--after-compact"),
+    cursor: args.includes("--cursor")
   }),
   guard: async (args) => guard(
     await readHookInput(),
