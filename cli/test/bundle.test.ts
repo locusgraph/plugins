@@ -39,6 +39,8 @@ describe.each(BUNDLES)("the committed bundle %s", (bundle) => {
     const result = run(script, ["teleport"], {});
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/usage: lg <recall\|guard\|init\|links>/);
+    expect(result.stderr).toMatch(
+      /usage: lg <recall\|guard\|skill-match\|init\|links\|login\|logout>/,
+    );
   });
 });

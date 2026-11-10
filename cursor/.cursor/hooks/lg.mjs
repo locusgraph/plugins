@@ -56,17 +56,6 @@ import { relative } from "node:path";
 // cli/src/platforms/claude-code.ts
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-var claudeCode = {
-  id: "claude-code",
-  label: "Claude Code",
-  nextStep: ({ engineUrl }) => (engineUrl === DEFAULT_ENGINE_URL ? "" : `export LOCUSGRAPH_URL=${engineUrl}, then `) + "in Claude Code: /plugin marketplace add locusgraph/plugins, then /plugin install locusgraph@locusgraph",
-  detect: ({ home }) => existsSync(join(home, ".claude")),
-  install: async () => []
-};
-
-// cli/src/platforms/codex.ts
-import { existsSync as existsSync2 } from "node:fs";
-import { join as join2 } from "node:path";
 
 // cli/src/files.ts
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -139,7 +128,33 @@ async function upsertTomlTable(path, table, body) {
   await writeText(path, replaceTomlTable(await readText(path) ?? "", table, body));
 }
 
+// cli/src/platforms/claude-code.ts
+var CLAUDE_CODE_READ_TOOLS = [
+  "mcp__plugin_locusgraph_locusgraph__retrieve_memories",
+  "mcp__plugin_locusgraph_locusgraph__list_contexts"
+];
+var SETTINGS = ".claude/settings.json";
+var claudeCode = {
+  id: "claude-code",
+  label: "Claude Code",
+  writesGlobal: `~/${SETTINGS}`,
+  nextStep: ({ engineUrl }) => (engineUrl === DEFAULT_ENGINE_URL ? "" : `export LOCUSGRAPH_URL=${engineUrl}, then `) + "in Claude Code: /plugin marketplace add locusgraph/plugins, then /plugin install locusgraph@locusgraph",
+  detect: ({ home }) => existsSync(join(home, ".claude")),
+  install: async ({ home }) => {
+    const settings = join(home, SETTINGS);
+    await mergeJson(settings, (config) => {
+      const permissions = asObject(config.permissions);
+      const allow = Array.isArray(permissions.allow) ? permissions.allow : [];
+      const missing = CLAUDE_CODE_READ_TOOLS.filter((tool) => !allow.includes(tool));
+      return { ...config, permissions: { ...permissions, allow: [...allow, ...missing] } };
+    });
+    return [settings];
+  }
+};
+
 // cli/src/platforms/codex.ts
+import { existsSync as existsSync2 } from "node:fs";
+import { join as join2 } from "node:path";
 var codex = {
   id: "codex",
   label: "Codex",
@@ -418,6 +433,45 @@ function links(args) {
 ` };
 }
 
+// cli/src/credentials.ts
+import { chmod, mkdir as mkdir3, readFile as readFile2, rm, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname2, join as join7 } from "node:path";
+function credentialsPath(env, home) {
+  const base = env.XDG_CONFIG_HOME || join7(home, ".config");
+  return join7(base, "locusgraph", "credentials.json");
+}
+async function readCredentials(path) {
+  try {
+    const value = JSON.parse(await readFile2(path, "utf8"));
+    const { key, graph_id: graphId, engine_url: engineUrl } = value;
+    if (typeof key !== "string" || key === "") return void 0;
+    if (typeof graphId !== "string" || graphId === "") return void 0;
+    if (typeof engineUrl !== "string" || engineUrl === "") return void 0;
+    return { key, graphId, engineUrl };
+  } catch {
+    return void 0;
+  }
+}
+async function writeCredentials(path, credentials) {
+  await mkdir3(dirname2(path), { recursive: true, mode: 448 });
+  const body = {
+    key: credentials.key,
+    graph_id: credentials.graphId,
+    engine_url: credentials.engineUrl
+  };
+  await writeFile2(path, `${JSON.stringify(body, null, 2)}
+`, { mode: 384 });
+  await chmod(path, 384);
+}
+async function removeCredentials(path) {
+  try {
+    await rm(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // cli/src/recall-query.ts
 function recallArguments({ repo, query }) {
   return {
@@ -431,22 +485,129 @@ function recallArguments({ repo, query }) {
 
 // cli/src/engine.ts
 var RECALL_TIMEOUT_MS = 4e3;
-var fetchMemories = async (env, workspace) => {
-  if (env.token === void 0 || env.graphId === void 0) return "";
+var SKILL_MATCH_TIMEOUT_MS = 2500;
+var SKILL_MATCH_MIN_SCORE = 0.6;
+async function retrieve(env, body, timeoutMs) {
+  if (env.token === void 0 || env.graphId === void 0) return { ok: false, status: 0 };
   try {
     const response = await fetch(`${env.engineUrl}/v1/memories`, {
       method: "POST",
       headers: { authorization: `Bearer ${env.token}`, "content-type": "application/json" },
-      body: JSON.stringify({ graph_id: env.graphId, ...recallArguments(workspace) }),
-      signal: AbortSignal.timeout(RECALL_TIMEOUT_MS)
+      body: JSON.stringify({ graph_id: env.graphId, ...body }),
+      signal: AbortSignal.timeout(timeoutMs)
     });
-    if (!response.ok) return "";
-    const body = await response.json();
-    return typeof body.data?.memories === "string" ? body.data.memories.trim() : "";
+    if (!response.ok) return { ok: false, status: response.status };
+    const json = await response.json();
+    const data = json.data;
+    return typeof data === "object" && data !== null ? { ok: true, data } : { ok: false, status: response.status };
   } catch {
-    return "";
+    return { ok: false, status: 0 };
   }
+}
+var fetchMemories = async (env, workspace) => {
+  const result2 = await retrieve(env, { ...recallArguments(workspace) }, RECALL_TIMEOUT_MS);
+  if (!result2.ok) return "";
+  const memories = result2.data.memories;
+  return typeof memories === "string" ? memories.trim() : "";
 };
+var matchSkill = async (env, prompt) => {
+  const result2 = await retrieve(
+    env,
+    {
+      query: prompt,
+      context_types: { skill: [] },
+      ranking: "similarity",
+      format: "json",
+      limit: 3
+    },
+    SKILL_MATCH_TIMEOUT_MS
+  );
+  if (!result2.ok || !Array.isArray(result2.data.items)) return void 0;
+  let best;
+  for (const item of result2.data.items) {
+    if (typeof item !== "object" || item === null) continue;
+    const { context_ids: ids, text, match_score: score } = item;
+    if (typeof text !== "string" || typeof score !== "number" || !Array.isArray(ids)) continue;
+    const contextId = ids.find(
+      (id) => typeof id === "string" && id.startsWith("skill:")
+    );
+    if (contextId === void 0 || score < SKILL_MATCH_MIN_SCORE) continue;
+    if (best === void 0 || score > best.score) best = { contextId, text, score };
+  }
+  return best;
+};
+
+// cli/src/commands/login.ts
+var GRAPH_FLAG = "--graph";
+var CHECK_TIMEOUT_MS = 8e3;
+var checkKey = (env) => retrieve(
+  env,
+  { query: "locusgraph login check", limit: 1, format: "json" },
+  CHECK_TIMEOUT_MS
+);
+var usage = "usage: <print your key> | lg login --graph <graph_id> [--engine <production|dev|url>]\nThe key is read from stdin, so it stays out of your shell history. Use a key limited to memory.read on that graph.\n";
+function takeGraphFlag(args) {
+  const rest = [];
+  let graphId;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (arg === GRAPH_FLAG || arg.startsWith(`${GRAPH_FLAG}=`)) {
+      const value = arg === GRAPH_FLAG ? args[++index] : arg.slice(GRAPH_FLAG.length + 1);
+      if (value === void 0 || value === "") return new Error(`${GRAPH_FLAG} needs a value`);
+      graphId = value;
+    } else {
+      rest.push(arg);
+    }
+  }
+  return graphId === void 0 ? { rest } : { graphId, rest };
+}
+async function login(args, { key, credentialsPath: credentialsPath2, paidToolsEnabled, check = checkKey }) {
+  const engine = takeEngineFlag(args);
+  if (engine instanceof Error) return { exitCode: 1, stderr: `${engine.message}
+` };
+  const graph = takeGraphFlag(engine.rest);
+  if (graph instanceof Error) return { exitCode: 1, stderr: `${graph.message}
+${usage}` };
+  if (graph.rest.length > 0) {
+    return { exitCode: 1, stderr: `unexpected argument: ${graph.rest[0]}
+${usage}` };
+  }
+  if (graph.graphId === void 0 || key === "") return { exitCode: 1, stderr: usage };
+  const credentials = {
+    key,
+    graphId: graph.graphId,
+    engineUrl: engine.engineUrl
+  };
+  const result2 = await check({
+    engineUrl: credentials.engineUrl,
+    token: credentials.key,
+    graphId: credentials.graphId,
+    paidToolsEnabled
+  });
+  if (!result2.ok) {
+    const reason = result2.status === 0 ? `could not reach ${credentials.engineUrl}` : `the engine answered ${result2.status}`;
+    return {
+      exitCode: 1,
+      stderr: `key not saved: ${reason}. Check the key, the graph id and the engine.
+`
+    };
+  }
+  await writeCredentials(credentialsPath2, credentials);
+  return {
+    exitCode: 0,
+    stdout: `saved to ${credentialsPath2} (readable only by you)
+session-start recall and skill matching now fetch memories themselves
+`
+  };
+}
+async function logout(credentialsPath2) {
+  const removed = await removeCredentials(credentialsPath2);
+  return {
+    exitCode: 0,
+    stdout: removed ? `removed ${credentialsPath2}
+` : "no saved key\n"
+  };
+}
 
 // cli/src/workspace.ts
 import { execFileSync } from "node:child_process";
@@ -498,12 +659,32 @@ async function recall(input, env, { afterCompact, fetch: fetch2 = fetchMemories,
 ` };
 }
 
-// cli/src/env.ts
-function readEnv(env) {
+// cli/src/commands/skill-match.ts
+var MIN_PROMPT_WORDS = 3;
+async function skillMatch(input, env, match = matchSkill) {
+  const prompt = (input.prompt ?? "").trim();
+  if (prompt.startsWith("/")) return { exitCode: 0 };
+  if (prompt.split(/\s+/).filter(Boolean).length < MIN_PROMPT_WORDS) return { exitCode: 0 };
+  if (env.token === void 0 || env.graphId === void 0) return { exitCode: 0 };
+  const skill = await match(env, prompt);
+  if (skill === void 0) return { exitCode: 0 };
   return {
-    engineUrl: (env.LOCUSGRAPH_URL || DEFAULT_ENGINE_URL).replace(/\/+$/, ""),
-    token: env.LOCUSGRAPH_TOKEN || void 0,
-    graphId: env.LOCUSGRAPH_GRAPH_ID || void 0,
+    exitCode: 0,
+    stdout: `LocusGraph: the stored skill \`${skill.contextId}\` matches this request (${skill.text.trim()}). Before starting, load its steps, rules and lessons with the locusgraph-skills skill and follow them, unless the user says otherwise.
+`
+  };
+}
+
+// cli/src/env.ts
+var trimSlash = (url) => url.replace(/\/+$/, "");
+function readEnv(env, saved) {
+  const engineUrl = trimSlash(env.LOCUSGRAPH_URL || DEFAULT_ENGINE_URL);
+  const fromEnv = Boolean(env.LOCUSGRAPH_TOKEN || env.LOCUSGRAPH_GRAPH_ID);
+  const usable = !fromEnv && saved !== void 0 && trimSlash(saved.engineUrl) === engineUrl;
+  return {
+    engineUrl,
+    token: usable ? saved.key : env.LOCUSGRAPH_TOKEN || void 0,
+    graphId: usable ? saved.graphId : env.LOCUSGRAPH_GRAPH_ID || void 0,
     paidToolsEnabled: env.LOCUSGRAPH_PAID === "1"
   };
 }
@@ -520,16 +701,23 @@ function parseHookInput(text) {
     return {};
   }
 }
-async function readHookInput(stdin = process.stdin) {
-  if (stdin.isTTY) return {};
+async function readStdin(stdin = process.stdin) {
+  if (stdin.isTTY) return "";
   let text = "";
   for await (const chunk of stdin) text += chunk;
-  return parseHookInput(text);
+  return text;
+}
+async function readHookInput(stdin = process.stdin) {
+  return parseHookInput(await readStdin(stdin));
 }
 
 // cli/src/main.ts
+var savedPath = () => credentialsPath(process.env, homedir());
+async function hookEnv() {
+  return readEnv(process.env, await readCredentials(savedPath()));
+}
 var COMMANDS = {
-  recall: async (args) => recall(await readHookInput(), readEnv(process.env), {
+  recall: async (args) => recall(await readHookInput(), await hookEnv(), {
     afterCompact: args.includes("--after-compact")
   }),
   guard: async (args) => guard(
@@ -537,13 +725,20 @@ var COMMANDS = {
     readEnv(process.env),
     args.includes("--cursor") ? "cursor" : "claude"
   ),
+  "skill-match": async () => skillMatch(await readHookInput(), await hookEnv()),
   init: (args) => init(args, {
     cwd: process.cwd(),
     home: homedir(),
     rules: RULES,
     hookScript: fileURLToPath(import.meta.url)
   }),
-  links: async (args) => links(args)
+  links: async (args) => links(args),
+  login: async (args) => login(args, {
+    key: (await readStdin()).trim(),
+    credentialsPath: savedPath(),
+    paidToolsEnabled: readEnv(process.env).paidToolsEnabled
+  }),
+  logout: async () => logout(savedPath())
 };
 async function main(argv) {
   const [name = "", ...args] = argv;

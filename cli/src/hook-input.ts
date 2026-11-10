@@ -2,6 +2,7 @@ export interface HookInput {
   readonly cwd?: string;
   readonly tool_name?: string;
   readonly toolName?: string;
+  readonly prompt?: string;
 }
 
 export function parseHookInput(text: string): HookInput {
@@ -13,11 +14,15 @@ export function parseHookInput(text: string): HookInput {
   }
 }
 
+export async function readStdin(stdin: NodeJS.ReadStream = process.stdin): Promise<string> {
+  if (stdin.isTTY) return "";
+  let text = "";
+  for await (const chunk of stdin) text += chunk;
+  return text;
+}
+
 export async function readHookInput(
   stdin: NodeJS.ReadStream = process.stdin,
 ): Promise<HookInput> {
-  if (stdin.isTTY) return {};
-  let text = "";
-  for await (const chunk of stdin) text += chunk;
-  return parseHookInput(text);
+  return parseHookInput(await readStdin(stdin));
 }
