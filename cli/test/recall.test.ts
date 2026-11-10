@@ -91,6 +91,9 @@ describe("recall", () => {
     );
 
     expect(fromRepo.stdout).toMatch(/^LocusGraph: this repository's graph is `g_work`/);
+    expect(fromRepo.stdout).toContain(
+      'Pass `graph_id: "g_work"` on every LocusGraph tool call',
+    );
     expect(fromDefault.stdout).not.toMatch(/this repository's graph/);
   });
 

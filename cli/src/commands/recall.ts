@@ -44,8 +44,9 @@ export function repoGraphNote(env: LocusGraphEnv): string {
   if (env.graphSource !== "repo" || env.graphId === undefined) return "";
   return (
     `LocusGraph: this repository's graph is \`${env.graphId}\` (from .locusgraph.json). ` +
-    "The LocusGraph tools read and write the graph chosen when they were signed in; if the " +
-    "user expects memories here to go to this graph and the tools use another, say so."
+    `Pass \`graph_id: "${env.graphId}"\` on every LocusGraph tool call in this session. ` +
+    "If a call is refused for this graph, the connection was approved for one other graph: " +
+    'tell the user to reconnect LocusGraph and choose "Every graph in this organization".'
   );
 }
 
