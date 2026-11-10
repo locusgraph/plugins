@@ -226,10 +226,15 @@ The graph is `LOCUSGRAPH_GRAPH_ID`, else `.locusgraph.json`, else the default. T
 ever sent to the engine it was saved for. A version 1 file (one key) still loads, as that key
 and the default.
 
-The MCP tools are not covered: they use the graph chosen when they were signed in (`/mcp` in
-Claude Code). When the graph comes from `.locusgraph.json`, session start names it, so the agent
-can say when the tools write somewhere else. Per-repository tools need the engine to accept a
-graph per call; see the open items below.
+The MCP tools follow it too. When the graph comes from `.locusgraph.json`, session start tells
+the agent to pass `graph_id` on every LocusGraph tool call, and the rules say the same. The engine
+checks read and write permission on that graph for each call.
+
+A connection approved for one graph reaches only that graph, so a call for another graph is
+refused. To work in several graphs through one connection, reconnect (`/mcp` in Claude Code,
+`codex mcp login locusgraph` in Codex, the MCP settings in Cursor) and choose **Every graph in
+this organization** on the consent page. That choice reaches every graph your account can open in
+the organization, including ones created later; keep the default single graph if one is enough.
 
 ## Develop
 
