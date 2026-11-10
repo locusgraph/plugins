@@ -1,6 +1,6 @@
 import { type FetchMemories, fetchMemories } from "../engine.ts";
 import type { LocusGraphEnv } from "../env.ts";
-import type { HookInput } from "../hook-input.ts";
+import { type HookInput, hookCwd } from "../hook-input.ts";
 import { recallArguments } from "../recall-query.ts";
 import { describeWorkspace, type Workspace } from "../workspace.ts";
 import type { CommandResult } from "./result.ts";
@@ -22,6 +22,8 @@ export function recallInstruction(workspace: Workspace): string {
 
 export interface RecallOptions {
   readonly afterCompact: boolean;
+  // Cursor reads sessionStart output as JSON: { additional_context }. Everything else reads text.
+  readonly cursor?: boolean;
   readonly fetch?: FetchMemories;
   readonly workspace?: Workspace;
 }
@@ -39,14 +41,19 @@ async function recallSection(env: LocusGraphEnv, workspace: Workspace, fetch: Fe
 export async function recall(
   input: HookInput,
   env: LocusGraphEnv,
-  { afterCompact, fetch = fetchMemories, workspace }: RecallOptions,
+  { afterCompact, cursor = false, fetch = fetchMemories, workspace }: RecallOptions,
 ): Promise<CommandResult> {
   const sections = [
-    await recallSection(env, workspace ?? describeWorkspace(input.cwd || process.cwd()), fetch),
+    await recallSection(env, workspace ?? describeWorkspace(hookCwd(input)), fetch),
     afterCompact ? STORE_AFTER_COMPACT : "",
   ].filter((section) => section !== "");
 
-  return sections.length === 0
-    ? { exitCode: 0 }
-    : { exitCode: 0, stdout: `${sections.join("\n\n")}\n` };
+  const text = sections.join("\n\n");
+  if (cursor) {
+    return {
+      exitCode: 0,
+      stdout: `${JSON.stringify(text === "" ? {} : { additional_context: text })}\n`,
+    };
+  }
+  return text === "" ? { exitCode: 0 } : { exitCode: 0, stdout: `${text}\n` };
 }

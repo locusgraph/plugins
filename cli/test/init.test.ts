@@ -54,7 +54,9 @@ describe("lg init", () => {
     expect(exitCode).toBe(0);
     expect(lines).toContainEqual(expect.stringMatching(/vscode\s+VS Code Copilot$/));
     expect(lines).toContainEqual(
-      expect.stringMatching(/codex.*~\/\.codex\/config\.toml, which is global/),
+      expect.stringMatching(
+        /codex.*~\/\.codex\/config\.toml and ~\/\.codex\/hooks\.json, which is global/,
+      ),
     );
     expect(lines.at(-1)).toMatch(/nothing written. Run lg init --yes/);
     await expect(read(".vscode/mcp.json")).rejects.toThrow();
@@ -99,6 +101,13 @@ describe("lg init", () => {
     const { hooks } = await readJson(".cursor/hooks.json");
     expect(hooks.stop).toHaveLength(1);
     expect(hooks.beforeMCPExecution).toHaveLength(1);
+    expect(hooks.sessionStart).toEqual([
+      { command: "node .cursor/hooks/lg.mjs recall --cursor" },
+    ]);
+    expect((await readJson(".cursor/cli.json")).permissions.allow).toEqual([
+      "Mcp(locusgraph:retrieve_memories)",
+      "Mcp(locusgraph:list_contexts)",
+    ]);
     expect(await read(".cursor/hooks/lg.mjs")).toBe("// bundled hook\n");
     expect(await read(".cursor/rules/locusgraph.mdc")).toMatch(/^---\n.*alwaysApply: true/s);
   });
@@ -129,6 +138,38 @@ describe("lg init", () => {
     const config = await readFile(join(home, ".codex/config.toml"), "utf8");
     expect(config.startsWith('model = "gpt-5"\n\n[mcp_servers.locusgraph]')).toBe(true);
     expect(config.split("[mcp_servers.locusgraph]")).toHaveLength(2);
+    for (const tool of ["retrieve_memories", "list_contexts"]) {
+      expect(
+        config.split(`[mcp_servers.locusgraph.tools.${tool}]\napproval_mode = "approve"`),
+      ).toHaveLength(2);
+    }
+  });
+
+  it("installs the Codex hooks once, keeping the user's own", async () => {
+    const { home, run } = await workspace();
+    await mkdir(join(home, ".codex"));
+    await writeFile(
+      join(home, ".codex/hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "say done" }] }] },
+      }),
+    );
+
+    await run(["codex"]);
+    await run(["codex"]);
+
+    const script = join(home, ".codex/locusgraph/lg.mjs");
+    const { hooks } = JSON.parse(await readFile(join(home, ".codex/hooks.json"), "utf8"));
+    expect(await readFile(script, "utf8")).toBe("// bundled hook\n");
+    expect(hooks.Stop).toHaveLength(1);
+    expect(hooks.SessionStart.map((group: { matcher: string }) => group.matcher)).toEqual([
+      "startup|resume|clear",
+      "compact",
+    ]);
+    expect(hooks.UserPromptSubmit).toEqual([
+      { hooks: [{ type: "command", command: `node "${script}" skill-match`, timeout: 5 }] },
+    ]);
+    expect(hooks.PreToolUse[0].matcher).toBe("mcp__locusgraph__(observe|deep_recall)");
   });
 
   it("hides the paid tools from Gemini CLI", async () => {

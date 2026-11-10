@@ -35,7 +35,11 @@ describe("guard", () => {
     const result = guard({ tool_name: "deep_recall" }, testEnv(), "cursor");
 
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout ?? "")).toMatchObject({ permission: "deny" });
+    expect(JSON.parse(result.stdout ?? "")).toEqual({
+      permission: "deny",
+      user_message: expect.stringMatching(/spends LocusGraph credits/),
+      agent_message: expect.stringMatching(/spends LocusGraph credits/),
+    });
   });
 
   it("lets a free tool through silently", () => {

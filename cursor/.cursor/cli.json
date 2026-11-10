@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "allow": ["Mcp(locusgraph:retrieve_memories)", "Mcp(locusgraph:list_contexts)"]
+  }
+}

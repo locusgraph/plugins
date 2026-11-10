@@ -24,6 +24,7 @@ const COMMANDS: Record<string, Command> = {
   recall: async (args) =>
     recall(await readHookInput(), await hookEnv(), {
       afterCompact: args.includes("--after-compact"),
+      cursor: args.includes("--cursor"),
     }),
   guard: async (args) =>
     guard(

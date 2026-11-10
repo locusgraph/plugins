@@ -1,2 +1,8 @@
 [mcp_servers.locusgraph]
 url = "https://api.locusgraph.com/mcp?tools=free"
+
+[mcp_servers.locusgraph.tools.retrieve_memories]
+approval_mode = "approve"
+
+[mcp_servers.locusgraph.tools.list_contexts]
+approval_mode = "approve"

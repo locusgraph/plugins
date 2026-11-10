@@ -3,6 +3,11 @@ export interface HookInput {
   readonly tool_name?: string;
   readonly toolName?: string;
   readonly prompt?: string;
+  readonly workspace_roots?: readonly string[];
+}
+
+export function hookCwd(input: HookInput): string {
+  return input.cwd || input.workspace_roots?.[0] || process.cwd();
 }
 
 export function parseHookInput(text: string): HookInput {

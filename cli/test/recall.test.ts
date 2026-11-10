@@ -54,6 +54,26 @@ describe("recall", () => {
     expect(result).toEqual({ exitCode: 0 });
   });
 
+  it("answers Cursor's sessionStart with additional_context, or an empty object", async () => {
+    const found = await recall({}, withKey, {
+      afterCompact: false,
+      cursor: true,
+      fetch: async () => "remembered",
+      workspace,
+    });
+    const empty = await recall({}, withKey, {
+      afterCompact: false,
+      cursor: true,
+      fetch: async () => "",
+      workspace,
+    });
+
+    expect(JSON.parse(found.stdout ?? "")).toEqual({
+      additional_context: "LocusGraph memories for this workspace:\nremembered",
+    });
+    expect(empty.stdout).toBe("{}\n");
+  });
+
   it("asks for a bounded store after compaction", async () => {
     const result = await recall({}, withKey, {
       afterCompact: true,
